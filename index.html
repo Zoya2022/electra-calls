@@ -94,9 +94,14 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     timerHandle = null;
     if (hostIdFromLink) setText('callerTimer','00:00'); else setText('hostTimer','00:00');
   }
-  async function microphone() {
+  async function microphone(options = {}) {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone access needs HTTPS and a supported browser.');
-    return navigator.mediaDevices.getUserMedia({audio:true,video:false});
+    // Apply browser-level noise/echo processing to callers before their audio
+    // is sent to the host. Leave the host microphone settings unchanged.
+    const audio = options.caller
+      ? { noiseSuppression: true, echoCancellation: true, autoGainControl: true }
+      : true;
+    return navigator.mediaDevices.getUserMedia({audio,video:false});
   }
   function setMicMuted(value) {
     muted = value;
@@ -202,7 +207,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       $('callBtn').disabled = true;
       try {
         setText('callerStatus','Requesting microphone permission…');
-        localStream = await microphone();
+        localStream = await microphone({caller:true});
         peer = new Peer();
         peer.on('open', () => {
           setText('callerStatus','Calling host… please wait for them to accept.');
