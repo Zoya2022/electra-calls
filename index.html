@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Electra Explains — Browser Call</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#f5f5f5;background:#111827}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px}
+main{width:min(100%,560px);background:#1f2937;border:1px solid #374151;border-radius:20px;padding:24px;box-shadow:0 18px 55px #0005}
+h1{font-size:1.45rem;margin:0 0 8px}p{color:#cbd5e1;line-height:1.5}
+button{border:0;border-radius:12px;padding:13px 18px;font-weight:700;font-size:1rem;cursor:pointer;margin:6px 6px 6px 0}
+.primary{background:#22c55e;color:#052e16}.secondary{background:#374151;color:#fff}.danger{background:#ef4444;color:#fff}
+input{width:100%;padding:13px;border-radius:10px;border:1px solid #64748b;background:#0f172a;color:#fff;font-size:1rem;margin:8px 0 12px}
+.panel{background:#0f172a;border-radius:14px;padding:16px;margin:16px 0}
+.small{font-size:.88rem;color:#94a3b8}.status{font-weight:700;color:#86efac;min-height:1.5em}
+.hidden{display:none}.link{overflow-wrap:anywhere;color:#93c5fd}
+audio{width:100%;margin-top:12px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Electra Explains — Call</h1>
+  <p>Simple browser-to-browser audio calling. No caller account or app required.</p>
+  <div id="home">
+    <button class="primary" id="hostBtn">Open host dashboard</button>
+    <p class="small">Choose this on your laptop to receive calls.</p>
+  </div>
+
+  <section id="host" class="hidden">
+    <div class="panel">
+      <div class="small">Your host link — share this with one viewer</div>
+      <p class="link" id="shareLink">Starting…</p>
+      <button class="secondary" id="copyBtn">Copy caller link</button>
+    </div>
+    <div class="status" id="hostStatus">Connecting…</div>
+    <div id="incoming" class="panel hidden">
+      <strong>Incoming call</strong>
+      <p>A viewer wants to talk to you.</p>
+      <button class="primary" id="acceptBtn">Accept</button>
+      <button class="danger" id="rejectBtn">Reject</button>
+    </div>
+    <div id="inCall" class="panel hidden">
+      <strong>You're connected</strong>
+      <audio id="remoteAudio" autoplay controls></audio>
+      <button class="danger" id="endHostBtn">End call</button>
+    </div>
+  </section>
+
+  <section id="caller" class="hidden">
+    <div class="panel">
+      <div class="small">You're calling the host</div>
+      <div class="status" id="callerStatus">Preparing call…</div>
+      <button class="primary" id="callBtn">Call now</button>
+      <button class="danger hidden" id="endCallerBtn">End call</button>
+      <audio id="callerRemoteAudio" autoplay controls></audio>
+    </div>
+  </section>
+  <p class="small">For testing, open the host dashboard on your laptop and the caller link in another browser/device. Allow microphone access.</p>
+</main>
+<script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  const hostIdFromLink = params.get('host');
+  let peer, incomingCall, activeCall, localStream, hostId, callerPeer;
+  const show = id => $(id).classList.remove('hidden');
+  const hide = id => $(id).classList.add('hidden');
+  const setText = (id, value) => $(id).textContent = value;
+
+  async function microphone() {
+    if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone access needs HTTPS and a supported browser.');
+    return await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+  }
+  function attachCall(call, audioId, statusId, endButtonId) {
+    activeCall = call;
+    call.on('stream', stream => {
+      $(audioId).srcObject = stream;
+      $(audioId).play().catch(()=>{});
+      setText(statusId, 'Connected — you can talk now.');
+      if(endButtonId) show(endButtonId);
+    });
+    call.on('close', () => {
+      $(audioId).srcObject = null;
+      setText(statusId, 'Call ended.');
+      if(endButtonId) hide(endButtonId);
+      if(audioId === 'remoteAudio') hide('inCall');
+    });
+    call.on('error', err => setText(statusId, 'Call error: ' + err.message));
+  }
+
+  if (hostIdFromLink) {
+    hide('home'); show('caller');
+    $('callBtn').addEventListener('click', async () => {
+      $('callBtn').disabled = true;
+      try {
+        setText('callerStatus', 'Requesting microphone…');
+        localStream = await microphone();
+        peer = new Peer();
+        peer.on('open', id => {
+          callerPeer = id;
+          setText('callerStatus', 'Calling host… Please wait for them to accept.');
+          const call = peer.call(hostIdFromLink, localStream);
+          attachCall(call, 'callerRemoteAudio', 'callerStatus', 'endCallerBtn');
+        });
+        peer.on('error', err => {
+          setText('callerStatus', 'Could not connect: ' + err.message);
+          $('callBtn').disabled = false;
+        });
+        show('endCallerBtn');
+      } catch(e) {
+        setText('callerStatus', e.message || 'Could not start microphone.');
+        $('callBtn').disabled = false;
+      }
+    });
+    $('endCallerBtn').addEventListener('click', () => {
+      if(activeCall) activeCall.close();
+      if(peer) peer.destroy();
+      if(localStream) localStream.getTracks().forEach(t=>t.stop());
+      hide('endCallerBtn'); $('callBtn').disabled = false;
+      setText('callerStatus','Call ended. You can try again.');
+    });
+  } else {
+    $('hostBtn').addEventListener('click', () => {
+      hide('home'); show('host');
+      setText('hostStatus','Connecting to free PeerJS signaling…');
+      peer = new Peer();
+      peer.on('open', id => {
+        hostId = id;
+        const link = location.origin + location.pathname + '?host=' + encodeURIComponent(id);
+        $('shareLink').textContent = link;
+        $('copyBtn').onclick = async () => {
+          try { await navigator.clipboard.writeText(link); $('copyBtn').textContent='Copied!'; }
+          catch { setText('hostStatus','Copy failed — select and copy the link above.'); }
+        };
+        setText('hostStatus','Ready. Waiting for a caller…');
+      });
+      peer.on('call', call => {
+        if(activeCall) { call.close(); return; }
+        incomingCall = call;
+        show('incoming');
+        setText('hostStatus','Incoming call — accept or reject.');
+      });
+      peer.on('error', err => setText('hostStatus','Connection error: '+err.message));
+    });
+    $('acceptBtn').addEventListener('click', async () => {
+      try {
+        localStream = await microphone();
+        incomingCall.answer(localStream);
+        hide('incoming'); show('inCall');
+        attachCall(incomingCall, 'remoteAudio', 'hostStatus', null);
+      } catch(e) { setText('hostStatus', e.message || 'Microphone permission was not granted.'); }
+    });
+    $('rejectBtn').addEventListener('click', () => {
+      if(incomingCall) incomingCall.close();
+      incomingCall = null; hide('incoming'); setText('hostStatus','Call rejected. Waiting for a caller…');
+    });
+    $('endHostBtn').addEventListener('click', () => {
+      if(activeCall) activeCall.close();
+      if(localStream) localStream.getTracks().forEach(t=>t.stop());
+      activeCall = null; hide('inCall'); setText('hostStatus','Call ended. Waiting for a caller…');
+    });
+  }
+})();
+</script>
+</body>
+</html>
