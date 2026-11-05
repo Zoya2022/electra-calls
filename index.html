@@ -130,8 +130,11 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     localStream = null;
   }
   function callClosed(call) {
-    if (activeCall === call) activeCall = null;
-    if (incomingCall === call) incomingCall = null;
+    // Cleanup must be safe to call from the button, PeerJS close event,
+    // and the underlying WebRTC connection-state event.
+    if (call && activeCall && activeCall !== call) return;
+    if (!call || activeCall === call) activeCall = null;
+    if (!call || incomingCall === call) incomingCall = null;
     connected = false; stopTimer(); stopLocalStream(); resetLocalControls();
     $('remoteAudio').srcObject = null; $('callerRemoteAudio').srcObject = null;
     if (hostIdFromLink) {
@@ -169,6 +172,25 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       else setText('hostStatus','Call error: ' + err.message);
       callClosed(call);
     });
+    // PeerJS close events can be missed when a browser tab/network drops.
+    // Watch the actual WebRTC peer connection as a second cleanup signal.
+    const watchPeerConnection = () => {
+      const pc = call.peerConnection;
+      if (!pc || call._electraStateWatcherAttached) return;
+      call._electraStateWatcherAttached = true;
+      pc.addEventListener('connectionstatechange', () => {
+        if (pc.connectionState === 'closed' || pc.connectionState === 'failed') {
+          callClosed(call);
+        }
+      });
+      pc.addEventListener('iceconnectionstatechange', () => {
+        if (pc.iceConnectionState === 'closed' || pc.iceConnectionState === 'failed') {
+          callClosed(call);
+        }
+      });
+    };
+    watchPeerConnection();
+    call.on('stream', watchPeerConnection);
   }
 
   if (hostIdFromLink) {
@@ -203,7 +225,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('endCallerBtn').addEventListener('click', () => {
       const call = activeCall;
       if (call) call.close();
-      else callClosed(null);
+      callClosed(call || null);
     });
   } else {
     bindVolume('hostVolume','remoteAudio','hostVolumeValue');
@@ -222,7 +244,15 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         $('hostDot').classList.add('live');
       });
       peer.on('call', call => {
-        if (activeCall || incomingCall) { call.close(); return; }
+        // Release stale references before deciding whether to reject a new caller.
+      if (activeCall && (!activeCall.peerConnection ||
+          ['closed','failed'].includes(activeCall.peerConnection.connectionState))) {
+        callClosed(activeCall);
+      }
+      if (incomingCall && incomingCall !== activeCall) {
+        if (incomingCall.open === false) incomingCall = null;
+      }
+      if (activeCall || incomingCall) { call.close(); return; }
         incomingCall = call; show('incoming');
         setText('hostStatus','Incoming call — accept or reject.');
         $('hostDot').classList.add('live');
@@ -234,6 +264,10 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('acceptBtn').addEventListener('click', async () => {
       if (!incomingCall) return;
       const call = incomingCall;
+      // Move the pending call into activeCall immediately so a later caller
+      // is not blocked by a stale incomingCall reference.
+      incomingCall = null;
+      activeCall = call;
       $('acceptBtn').disabled = true;
       try {
         localStream = await microphone();
@@ -241,7 +275,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         hide('incoming'); show('inCall'); attachCall(call);
       } catch (error) {
         setText('hostStatus',error.message || 'Microphone permission was not granted.');
-        call.close(); incomingCall = null;
+        call.close(); callClosed(call);
       } finally { $('acceptBtn').disabled = false; }
     });
     $('rejectBtn').addEventListener('click', () => {
@@ -252,7 +286,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('endHostBtn').addEventListener('click', () => {
       const call = activeCall;
       if (call) call.close();
-      else callClosed(null);
+      callClosed(call || null);
     });
   }
 })();
