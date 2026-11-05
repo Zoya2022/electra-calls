@@ -3,60 +3,68 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Electra Explains — Browser Call</title>
+<meta name="theme-color" content="#090d18">
+<title>Electra Explains — Live Calls</title>
 <style>
-:root{font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#f5f5f5;background:#111827}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px}
-main{width:min(100%,560px);background:#1f2937;border:1px solid #374151;border-radius:20px;padding:24px;box-shadow:0 18px 55px #0005}
-h1{font-size:1.45rem;margin:0 0 8px}p{color:#cbd5e1;line-height:1.5}
-button{border:0;border-radius:12px;padding:13px 18px;font-weight:700;font-size:1rem;cursor:pointer;margin:6px 6px 6px 0}
-.primary{background:#22c55e;color:#052e16}.secondary{background:#374151;color:#fff}.danger{background:#ef4444;color:#fff}
-input{width:100%;padding:13px;border-radius:10px;border:1px solid #64748b;background:#0f172a;color:#fff;font-size:1rem;margin:8px 0 12px}
-.panel{background:#0f172a;border-radius:14px;padding:16px;margin:16px 0}
-.small{font-size:.88rem;color:#94a3b8}.status{font-weight:700;color:#86efac;min-height:1.5em}
-.hidden{display:none}.link{overflow-wrap:anywhere;color:#93c5fd}
-audio{width:100%;margin-top:12px}
+:root{color-scheme:dark;--bg:#090d18;--panel:#121a2b;--panel2:#0d1422;--line:#26334b;--text:#f5f7ff;--muted:#9ba9c2;--accent:#9b87f5;--green:#45d6a0;--red:#ff647c}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;padding:28px 16px;background:radial-gradient(ellipse at 50% -15%,#28315a 0,transparent 55%),var(--bg);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;justify-content:center;align-items:center}
+main{width:min(100%,680px)}.brand{text-align:center;margin-bottom:22px}.eyebrow{font-size:.72rem;letter-spacing:.2em;color:#b7aaff;font-weight:800}.brand h1{font-size:clamp(1.6rem,5vw,2.25rem);margin:8px 0 5px;letter-spacing:-.04em}.brand p{color:var(--muted);margin:0;font-size:.94rem}
+.card{background:linear-gradient(145deg,#172137,#101827);border:1px solid var(--line);border-radius:24px;padding:clamp(20px,5vw,32px);box-shadow:0 24px 80px #0007}
+.hidden{display:none!important}.panel{background:var(--panel2);border:1px solid var(--line);border-radius:17px;padding:18px;margin:18px 0}
+.statusline{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:.92rem}.dot{width:9px;height:9px;border-radius:50%;background:#68758e;box-shadow:0 0 0 4px #68758e22}.dot.live{background:var(--green);box-shadow:0 0 0 4px #45d6a022}
+.status{font-weight:650;color:#dce5f7;margin:12px 0 4px;min-height:1.4em}.muted{color:var(--muted)}.small{font-size:.83rem;color:var(--muted);line-height:1.5}
+.linkbox{background:#0a1020;border:1px solid #34425f;border-radius:13px;padding:13px;margin:10px 0;overflow-wrap:anywhere;color:#c8c0ff;font-size:.9rem;line-height:1.5}
+button{border:0;border-radius:12px;padding:12px 17px;font:700 .94rem inherit;cursor:pointer;transition:transform .15s,filter .15s}button:hover{filter:brightness(1.1);transform:translateY(-1px)}button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.primary{background:linear-gradient(135deg,#a99aff,#8069e8);color:#100d25}.secondary{background:#26334b;color:#f5f7ff;border:1px solid #3a4965}.danger{background:#542536;color:#ffdce3;border:1px solid #84364d}.success{background:#153e37;color:#b8ffe8;border:1px solid #286e5c}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}
+.section-title{font-size:1.04rem;font-weight:750;margin:0 0 5px}.timer{font-variant-numeric:tabular-nums;font-size:2.35rem;font-weight:750;letter-spacing:.04em;margin:10px 0}
+.controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:16px}.control{background:#202c42;border:1px solid #34435d;color:#eef2ff;padding:14px 12px}.control.active{background:#573044;border-color:#a64a69;color:#ffe3ea}.volume{margin-top:17px}.volume label{display:flex;justify-content:space-between;color:var(--muted);font-size:.85rem;margin-bottom:9px}input[type=range]{width:100%;accent-color:#a99aff}
+.center{text-align:center}.bigicon{width:64px;height:64px;border-radius:20px;background:#2a2550;color:#c9bdff;display:grid;place-items:center;font-size:1.8rem;margin:0 auto 14px}
+.divider{height:1px;background:var(--line);margin:20px 0}.badge{display:inline-flex;align-items:center;gap:7px;border-radius:99px;background:#1c2e35;color:#8ef0c7;padding:7px 11px;font-size:.78rem;font-weight:750}
+footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
+@media(max-width:480px){body{padding:18px 12px}.card{border-radius:20px}.controls{grid-template-columns:1fr 1fr}.actions button{flex:1}}
 </style>
 </head>
 <body>
 <main>
-  <h1>Electra Explains — Call</h1>
-  <p>Simple browser-to-browser audio calling. No caller account or app required.</p>
-  <div id="home">
-    <button class="primary" id="hostBtn">Open host dashboard</button>
-    <p class="small">Choose this on your laptop to receive calls.</p>
-  </div>
-
-  <section id="host" class="hidden">
-    <div class="panel">
-      <div class="small">Your host link — share this with one viewer</div>
-      <p class="link" id="shareLink">Starting…</p>
-      <button class="secondary" id="copyBtn">Copy caller link</button>
-    </div>
-    <div class="status" id="hostStatus">Connecting…</div>
-    <div id="incoming" class="panel hidden">
-      <strong>Incoming call</strong>
-      <p>A viewer wants to talk to you.</p>
-      <button class="primary" id="acceptBtn">Accept</button>
-      <button class="danger" id="rejectBtn">Reject</button>
-    </div>
-    <div id="inCall" class="panel hidden">
-      <strong>You're connected</strong>
-      <audio id="remoteAudio" autoplay controls></audio>
-      <button class="danger" id="endHostBtn">End call</button>
-    </div>
-  </section>
-
-  <section id="caller" class="hidden">
-    <div class="panel">
-      <div class="small">You're calling the host</div>
-      <div class="status" id="callerStatus">Preparing call…</div>
-      <button class="primary" id="callBtn">Call now</button>
-      <button class="danger hidden" id="endCallerBtn">End call</button>
-      <audio id="callerRemoteAudio" autoplay controls></audio>
-    </div>
-  </section>
-  <p class="small">For testing, open the host dashboard on your laptop and the caller link in another browser/device. Allow microphone access.</p>
+<header class="brand"><div class="eyebrow">ELECTRA EXPLAINS</div><h1>Live Call Studio</h1><p>Join the conversation, one caller at a time.</p></header>
+<div class="card">
+<section id="home" class="center">
+<div class="bigicon">✦</div><h2 class="section-title">Welcome to the call studio</h2>
+<p class="muted">Open the host dashboard on your streaming computer, or use a caller link shared by the host.</p>
+<button class="primary" id="hostBtn">Open host dashboard</button>
+</section>
+<section id="host" class="hidden">
+<div class="statusline"><span class="dot" id="hostDot"></span><span id="hostStatus">Starting host dashboard…</span></div>
+<div class="panel">
+<div class="small">YOUR LIVE CALLER LINK</div><div class="linkbox" id="shareLink">Creating your link…</div>
+<div class="actions"><button class="secondary" id="copyBtn">Copy caller link</button></div>
+<p class="small">Keep this host page open during your live. Share this same link with every viewer; it stays the same between calls.</p>
+</div>
+<div id="incoming" class="panel hidden">
+<div class="badge">● INCOMING CALL</div><h2 class="section-title" style="margin-top:14px">Someone wants to join</h2><p class="muted">Accept to bring the viewer on air.</p>
+<div class="actions"><button class="primary" id="acceptBtn">Accept call</button><button class="danger" id="rejectBtn">Reject</button></div>
+</div>
+<div id="inCall" class="panel hidden">
+<div class="statusline"><span class="dot live"></span><span>CALL CONNECTED</span></div><div class="timer" id="hostTimer">00:00</div><p class="small">You are live with a viewer.</p>
+<div class="controls"><button class="control" id="hostMuteBtn">🎙 Mute mic</button><button class="control" id="hostDeafenBtn">🔊 Deafen</button></div>
+<div class="volume"><label for="hostVolume"><span>Speaker volume</span><span id="hostVolumeValue">100%</span></label><input id="hostVolume" type="range" min="0" max="100" value="100"></div>
+<div class="actions"><button class="danger" id="endHostBtn">End call</button></div>
+</div>
+<div class="small" id="hostHint">Your caller link remains available while this dashboard stays open.</div>
+</section>
+<section id="caller" class="hidden center">
+<div class="bigicon">☎</div><div class="badge" id="callerBadge">READY TO CALL</div><h2 class="section-title" style="margin-top:14px">Talk to Electra Explains</h2>
+<p class="muted" id="callerStatus">Press the button when you're ready to join the live conversation.</p>
+<div id="callerInCall" class="hidden">
+<div class="timer" id="callerTimer">00:00</div><div class="controls"><button class="control" id="callerMuteBtn">🎙 Mute mic</button><button class="control" id="callerDeafenBtn">🔊 Deafen</button></div>
+<div class="volume"><label for="callerVolume"><span>Speaker volume</span><span id="callerVolumeValue">100%</span></label><input id="callerVolume" type="range" min="0" max="100" value="100"></div>
+</div>
+<div class="actions" style="justify-content:center"><button class="primary" id="callBtn">Call now</button><button class="danger hidden" id="endCallerBtn">End call</button></div>
+<p class="small">Allow microphone access when your browser asks. No account or app needed.</p>
+</section>
+<audio id="remoteAudio" autoplay playsinline></audio><audio id="callerRemoteAudio" autoplay playsinline></audio>
+</div>
+<footer>Browser calling · No viewer account required</footer>
 </main>
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
 <script>
@@ -64,102 +72,187 @@ audio{width:100%;margin-top:12px}
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const hostIdFromLink = params.get('host');
-  let peer, incomingCall, activeCall, localStream, hostId, callerPeer;
+  let peer = null, incomingCall = null, activeCall = null, localStream = null;
+  let timerStarted = 0, timerHandle = null, connected = false, muted = false, deafened = false;
   const show = id => $(id).classList.remove('hidden');
   const hide = id => $(id).classList.add('hidden');
-  const setText = (id, value) => $(id).textContent = value;
-
+  const setText = (id, value) => { $(id).textContent = value; };
+  const formatTime = ms => {
+    const total = Math.floor(ms / 1000), minutes = Math.floor(total / 60), seconds = total % 60;
+    return String(minutes).padStart(2,'0') + ':' + String(seconds).padStart(2,'0');
+  };
+  function startTimer() {
+    stopTimer(); timerStarted = Date.now();
+    const tick = () => {
+      const value = formatTime(Date.now() - timerStarted);
+      if (hostIdFromLink) setText('callerTimer', value); else setText('hostTimer', value);
+    };
+    tick(); timerHandle = setInterval(tick, 250);
+  }
+  function stopTimer() {
+    if (timerHandle) clearInterval(timerHandle);
+    timerHandle = null;
+    if (hostIdFromLink) setText('callerTimer','00:00'); else setText('hostTimer','00:00');
+  }
   async function microphone() {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('Microphone access needs HTTPS and a supported browser.');
-    return await navigator.mediaDevices.getUserMedia({audio:true, video:false});
+    return navigator.mediaDevices.getUserMedia({audio:true,video:false});
   }
-  function attachCall(call, audioId, statusId, endButtonId) {
+  function setMicMuted(value) {
+    muted = value;
+    if (localStream) localStream.getAudioTracks().forEach(track => track.enabled = !value);
+    const id = hostIdFromLink ? 'callerMuteBtn' : 'hostMuteBtn';
+    setText(id, value ? '🎙 Unmute mic' : '🎙 Mute mic');
+    $(id).classList.toggle('active', value);
+  }
+  function setDeafened(value) {
+    deafened = value;
+    const audio = $(hostIdFromLink ? 'callerRemoteAudio' : 'remoteAudio');
+    audio.muted = value;
+    const id = hostIdFromLink ? 'callerDeafenBtn' : 'hostDeafenBtn';
+    setText(id, value ? '🔇 Undeafen' : '🔊 Deafen');
+    $(id).classList.toggle('active', value);
+  }
+  function bindVolume(inputId, audioId, labelId) {
+    $(inputId).addEventListener('input', () => {
+      const value = Number($(inputId).value);
+      $(audioId).volume = value / 100;
+      setText(labelId, value + '%');
+    });
+  }
+  function resetLocalControls() {
+    setMicMuted(false); setDeafened(false);
+    const audio = $(hostIdFromLink ? 'callerRemoteAudio' : 'remoteAudio');
+    audio.muted = false; audio.volume = 1;
+  }
+  function stopLocalStream() {
+    if (localStream) localStream.getTracks().forEach(track => track.stop());
+    localStream = null;
+  }
+  function callClosed(call) {
+    if (activeCall === call) activeCall = null;
+    if (incomingCall === call) incomingCall = null;
+    connected = false; stopTimer(); stopLocalStream(); resetLocalControls();
+    $('remoteAudio').srcObject = null; $('callerRemoteAudio').srcObject = null;
+    if (hostIdFromLink) {
+      hide('callerInCall'); hide('endCallerBtn'); show('callBtn');
+      $('callBtn').disabled = false;
+      setText('callerBadge','READY FOR NEXT CALLER');
+      setText('callerStatus','Call ended. You can use this same link to call again.');
+      if (peer) { peer.destroy(); peer = null; }
+    } else {
+      hide('inCall'); hide('incoming');
+      setText('hostStatus','Ready — waiting for the next caller.');
+      $('hostDot').classList.add('live');
+    }
+  }
+  function attachCall(call) {
     activeCall = call;
+    const audio = $(hostIdFromLink ? 'callerRemoteAudio' : 'remoteAudio');
     call.on('stream', stream => {
-      $(audioId).srcObject = stream;
-      $(audioId).play().catch(()=>{});
-      setText(statusId, 'Connected — you can talk now.');
-      if(endButtonId) show(endButtonId);
+      audio.srcObject = stream;
+      audio.play().catch(() => {});
+      connected = true; startTimer();
+      if (hostIdFromLink) {
+        show('callerInCall'); hide('callBtn'); show('endCallerBtn');
+        setText('callerBadge','CONNECTED');
+        setText('callerStatus','You are connected. Say hello!');
+      } else {
+        show('inCall'); hide('incoming');
+        setText('hostStatus','Caller connected — you are live.');
+        $('hostDot').classList.add('live');
+      }
     });
-    call.on('close', () => {
-      $(audioId).srcObject = null;
-      setText(statusId, 'Call ended.');
-      if(endButtonId) hide(endButtonId);
-      if(audioId === 'remoteAudio') hide('inCall');
+    call.on('close', () => callClosed(call));
+    call.on('error', err => {
+      if (hostIdFromLink) setText('callerStatus','Call error: ' + err.message);
+      else setText('hostStatus','Call error: ' + err.message);
+      callClosed(call);
     });
-    call.on('error', err => setText(statusId, 'Call error: ' + err.message));
   }
 
   if (hostIdFromLink) {
     hide('home'); show('caller');
+    bindVolume('callerVolume','callerRemoteAudio','callerVolumeValue');
+    $('callerMuteBtn').addEventListener('click', () => setMicMuted(!muted));
+    $('callerDeafenBtn').addEventListener('click', () => setDeafened(!deafened));
     $('callBtn').addEventListener('click', async () => {
       $('callBtn').disabled = true;
       try {
-        setText('callerStatus', 'Requesting microphone…');
+        setText('callerStatus','Requesting microphone permission…');
         localStream = await microphone();
         peer = new Peer();
-        peer.on('open', id => {
-          callerPeer = id;
-          setText('callerStatus', 'Calling host… Please wait for them to accept.');
+        peer.on('open', () => {
+          setText('callerStatus','Calling host… please wait for them to accept.');
           const call = peer.call(hostIdFromLink, localStream);
-          attachCall(call, 'callerRemoteAudio', 'callerStatus', 'endCallerBtn');
+          if (!call) throw new Error('Could not start the call. Please try again.');
+          attachCall(call);
+          show('endCallerBtn');
         });
         peer.on('error', err => {
-          setText('callerStatus', 'Could not connect: ' + err.message);
+          setText('callerStatus','Could not connect: ' + err.message);
           $('callBtn').disabled = false;
+          stopLocalStream();
+          if (peer) { peer.destroy(); peer = null; }
         });
-        show('endCallerBtn');
-      } catch(e) {
-        setText('callerStatus', e.message || 'Could not start microphone.');
-        $('callBtn').disabled = false;
+      } catch (error) {
+        setText('callerStatus',error.message || 'Could not start microphone.');
+        $('callBtn').disabled = false; stopLocalStream();
       }
     });
     $('endCallerBtn').addEventListener('click', () => {
-      if(activeCall) activeCall.close();
-      if(peer) peer.destroy();
-      if(localStream) localStream.getTracks().forEach(t=>t.stop());
-      hide('endCallerBtn'); $('callBtn').disabled = false;
-      setText('callerStatus','Call ended. You can try again.');
+      const call = activeCall;
+      if (call) call.close();
+      else callClosed(null);
     });
   } else {
+    bindVolume('hostVolume','remoteAudio','hostVolumeValue');
     $('hostBtn').addEventListener('click', () => {
       hide('home'); show('host');
-      setText('hostStatus','Connecting to free PeerJS signaling…');
+      setText('hostStatus','Connecting to call network…');
       peer = new Peer();
       peer.on('open', id => {
-        hostId = id;
         const link = location.origin + location.pathname + '?host=' + encodeURIComponent(id);
-        $('shareLink').textContent = link;
+        setText('shareLink',link);
         $('copyBtn').onclick = async () => {
-          try { await navigator.clipboard.writeText(link); $('copyBtn').textContent='Copied!'; }
+          try { await navigator.clipboard.writeText(link); setText('copyBtn','Copied!'); }
           catch { setText('hostStatus','Copy failed — select and copy the link above.'); }
         };
-        setText('hostStatus','Ready. Waiting for a caller…');
+        setText('hostStatus','Ready — waiting for a caller.');
+        $('hostDot').classList.add('live');
       });
       peer.on('call', call => {
-        if(activeCall) { call.close(); return; }
-        incomingCall = call;
-        show('incoming');
+        if (activeCall || incomingCall) { call.close(); return; }
+        incomingCall = call; show('incoming');
         setText('hostStatus','Incoming call — accept or reject.');
+        $('hostDot').classList.add('live');
       });
-      peer.on('error', err => setText('hostStatus','Connection error: '+err.message));
+      peer.on('error', err => setText('hostStatus','Connection error: ' + err.message));
     });
+    $('hostMuteBtn').addEventListener('click', () => setMicMuted(!muted));
+    $('hostDeafenBtn').addEventListener('click', () => setDeafened(!deafened));
     $('acceptBtn').addEventListener('click', async () => {
+      if (!incomingCall) return;
+      const call = incomingCall;
+      $('acceptBtn').disabled = true;
       try {
         localStream = await microphone();
-        incomingCall.answer(localStream);
-        hide('incoming'); show('inCall');
-        attachCall(incomingCall, 'remoteAudio', 'hostStatus', null);
-      } catch(e) { setText('hostStatus', e.message || 'Microphone permission was not granted.'); }
+        call.answer(localStream);
+        hide('incoming'); show('inCall'); attachCall(call);
+      } catch (error) {
+        setText('hostStatus',error.message || 'Microphone permission was not granted.');
+        call.close(); incomingCall = null;
+      } finally { $('acceptBtn').disabled = false; }
     });
     $('rejectBtn').addEventListener('click', () => {
-      if(incomingCall) incomingCall.close();
-      incomingCall = null; hide('incoming'); setText('hostStatus','Call rejected. Waiting for a caller…');
+      const call = incomingCall; incomingCall = null;
+      if (call) call.close();
+      hide('incoming'); setText('hostStatus','Call declined — waiting for the next caller.');
     });
     $('endHostBtn').addEventListener('click', () => {
-      if(activeCall) activeCall.close();
-      if(localStream) localStream.getTracks().forEach(t=>t.stop());
-      activeCall = null; hide('inCall'); setText('hostStatus','Call ended. Waiting for a caller…');
+      const call = activeCall;
+      if (call) call.close();
+      else callClosed(null);
     });
   }
 })();
