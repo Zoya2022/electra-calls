@@ -229,11 +229,13 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     });
   } else {
     bindVolume('hostVolume','remoteAudio','hostVolumeValue');
-    $('hostBtn').addEventListener('click', () => {
-      hide('home'); show('host');
+    function makeHostPeer(preferredId) {
+      if (peer && !peer.destroyed) peer.destroy();
       setText('hostStatus','Connecting to call network…');
-      peer = new Peer();
-      peer.on('open', id => {
+      peer = new Peer(preferredId);
+      const thisPeer = peer;
+      thisPeer.on('open', id => {
+        if (peer !== thisPeer) return;
         const link = location.origin + location.pathname + '?host=' + encodeURIComponent(id);
         setText('shareLink',link);
         $('copyBtn').onclick = async () => {
@@ -243,21 +245,48 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         setText('hostStatus','Ready — waiting for a caller.');
         $('hostDot').classList.add('live');
       });
-      peer.on('call', call => {
-        // Release stale references before deciding whether to reject a new caller.
-      if (activeCall && (!activeCall.peerConnection ||
-          ['closed','failed'].includes(activeCall.peerConnection.connectionState))) {
-        callClosed(activeCall);
-      }
-      if (incomingCall && incomingCall !== activeCall) {
-        if (incomingCall.open === false) incomingCall = null;
-      }
-      if (activeCall || incomingCall) { call.close(); return; }
-        incomingCall = call; show('incoming');
+      thisPeer.on('disconnected', () => {
+        if (peer !== thisPeer) return;
+        setText('hostStatus','Reconnecting to call network…');
+        $('hostDot').classList.remove('live');
+        // Keep the same host ID and caller link while restoring signaling.
+        const retry = () => {
+          if (peer !== thisPeer || thisPeer.destroyed) return;
+          if (thisPeer.disconnected) thisPeer.reconnect();
+        };
+        setTimeout(retry, 1200);
+      });
+      thisPeer.on('call', call => {
+        if (peer !== thisPeer) { call.close(); return; }
+        // Clear references left behind by a caller who disconnected abruptly.
+        if (activeCall && activeCall.open === false) callClosed(activeCall);
+        if (incomingCall && incomingCall.open === false) incomingCall = null;
+        if (activeCall || incomingCall) { call.close(); return; }
+        incomingCall = call;
+        show('incoming');
         setText('hostStatus','Incoming call — accept or reject.');
         $('hostDot').classList.add('live');
       });
-      peer.on('error', err => setText('hostStatus','Connection error: ' + err.message));
+      thisPeer.on('error', err => {
+        if (peer !== thisPeer) return;
+        if (err.type === 'unavailable-id') {
+          // A previous host tab may still be releasing the saved ID.
+          setText('hostStatus','Host link is already active in another tab. Close the other host tab, then reopen this dashboard.');
+        } else {
+          setText('hostStatus','Connection error: ' + err.message);
+        }
+      });
+    }
+    $('hostBtn').addEventListener('click', () => {
+      hide('home'); show('host');
+      // Persist one private, random host ID on this browser so refreshing the
+      // host dashboard does not invalidate the caller link.
+      let savedHostId = localStorage.getItem('electraExplainsHostId');
+      if (!savedHostId) {
+        savedHostId = 'electra-' + (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now().toString(36));
+        localStorage.setItem('electraExplainsHostId', savedHostId);
+      }
+      makeHostPeer(savedHostId);
     });
     $('hostMuteBtn').addEventListener('click', () => setMicMuted(!muted));
     $('hostDeafenBtn').addEventListener('click', () => setDeafened(!deafened));
