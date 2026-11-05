@@ -48,7 +48,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
 <div class="statusline"><span class="dot live"></span><span>CALL CONNECTED</span></div><div class="timer" id="hostTimer">00:00</div><p class="small">You are live with a viewer.</p>
 <div class="controls"><button class="control" id="hostMuteBtn">🎙 Mute mic</button><button class="control" id="hostDeafenBtn">🔊 Deafen</button></div>
 <div class="volume"><label for="hostVolume"><span>Speaker volume</span><span id="hostVolumeValue">100%</span></label><input id="hostVolume" type="range" min="0" max="100" value="100"></div>
-<div class="actions"><button class="danger" id="endHostBtn">End call</button></div>
+<div class="actions"><button class="danger" id="blockHostBtn">End &amp; block caller</button><button class="secondary" id="endHostBtn">End call</button></div>
 </div>
 <div class="small" id="hostHint">Your caller link remains available while this dashboard stays open.</div>
 </section>
@@ -263,6 +263,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       });
       thisPeer.on('call', call => {
         if (peer !== thisPeer) { call.close(); return; }
+        // Reject PeerJS IDs previously blocked by the host on this browser.
+        const blockedCallerIds = JSON.parse(localStorage.getItem('electraBlockedCallerIds') || '[]');
+        if (blockedCallerIds.includes(call.peer)) { call.close(); return; }
         // Clear references left behind by a caller who disconnected abruptly.
         if (activeCall && activeCall.open === false) callClosed(activeCall);
         if (incomingCall && incomingCall.open === false) incomingCall = null;
@@ -316,6 +319,19 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       const call = incomingCall; incomingCall = null;
       if (call) call.close();
       hide('incoming'); setText('hostStatus','Call declined — waiting for the next caller.');
+    });
+    $('blockHostBtn').addEventListener('click', () => {
+      const call = activeCall;
+      if (!call) return;
+      // Store the caller's current PeerJS ID locally and reject it on future attempts.
+      const blockedCallerIds = JSON.parse(localStorage.getItem('electraBlockedCallerIds') || '[]');
+      if (call.peer && !blockedCallerIds.includes(call.peer)) {
+        blockedCallerIds.push(call.peer);
+        localStorage.setItem('electraBlockedCallerIds', JSON.stringify(blockedCallerIds));
+      }
+      call.close();
+      callClosed(call);
+      setText('hostStatus','Caller ended and blocked on this browser.');
     });
     $('endHostBtn').addEventListener('click', () => {
       const call = activeCall;
