@@ -144,10 +144,18 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       setText('queueInfo', count === 1 ? '1 caller is waiting.' : count + ' callers are waiting.');
       setText('queueNames', 'Accept or reject the next caller in line.');
       setText('hostStatus', activeCall ? 'Caller connected — ' + count + ' waiting.' : count + ' caller(s) waiting to be accepted.');
-    } else if (!activeCall) {
+    } else {
       hide('incoming');
-      setText('hostStatus','Ready — waiting for a caller.');
+      setText('hostStatus', activeCall ? 'Caller connected — you are live.' : 'Ready — waiting for a caller.');
     }
+  }
+  function removeWaitingCall(call) {
+    const index = waitingCalls.findIndex(item => item === call || item.peer === call.peer);
+    if (index < 0) return;
+    waitingCalls.splice(index, 1);
+    if (incomingCall === call) incomingCall = null;
+    refreshWaitingQueue();
+    updateWaitingPositions();
   }
   function updateWaitingPositions() {
     waitingCalls.forEach((call, index) => sendCallerStatus(call.peer, 'waiting', index + 1));
@@ -325,6 +333,8 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         if (waitingCalls.some(existing => existing.peer === call.peer) || (activeCall && activeCall.peer === call.peer)) { call.close(); return; }
         if (waitingCalls.length >= 5) { sendCallerStatus(call.peer, 'declined'); call.close(); return; }
         waitingCalls.push(call);
+        call.on('close', () => removeWaitingCall(call));
+        call.on('error', () => removeWaitingCall(call));
         sendCallerStatus(call.peer, 'waiting', waitingCalls.length);
         refreshWaitingQueue();
         updateWaitingPositions();
