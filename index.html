@@ -160,6 +160,10 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     // Cleanup must be safe to call from the button, PeerJS close event,
     // and the underlying WebRTC connection-state event.
     if (call && activeCall && activeCall !== call) return;
+    if (call) {
+      const queuedIndex = waitingCalls.findIndex(item => item === call || item.peer === call.peer);
+      if (queuedIndex >= 0) waitingCalls.splice(queuedIndex, 1);
+    }
     if (!call || activeCall === call) activeCall = null;
     if (!call || incomingCall === call) incomingCall = null;
     connected = false; stopTimer(); stopLocalStream(); resetLocalControls();
