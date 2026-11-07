@@ -41,7 +41,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
 <p class="small">Keep this host page open during your live. Share this same link with every viewer; it stays the same between calls.</p>
 </div>
 <div id="incoming" class="panel hidden">
-<div class="badge">● INCOMING CALL</div><h2 class="section-title" style="margin-top:14px">Someone wants to join</h2><p class="muted">Accept to bring the viewer on air.</p>
+<div class="badge">● CALL WAITING</div><h2 class="section-title" style="margin-top:14px">Caller waiting to join</h2><p class="muted" id="queueInfo">1 caller is waiting.</p><p class="small" id="queueNames">Accept or reject the next caller in line.</p>
 <div class="actions"><button class="primary" id="acceptBtn">Accept call</button><button class="danger" id="rejectBtn">Reject</button></div>
 </div>
 <div id="inCall" class="panel hidden">
@@ -73,6 +73,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   const params = new URLSearchParams(location.search);
   const hostIdFromLink = params.get('host');
   let peer = null, incomingCall = null, activeCall = null, localStream = null;
+  let callerDataConnection = null;
+  const waitingCalls = [];
+  const callerDataConnections = new Map();
   let timerStarted = 0, timerHandle = null, connected = false, muted = false, deafened = false;
   const show = id => $(id).classList.remove('hidden');
   const hide = id => $(id).classList.add('hidden');
@@ -130,6 +133,25 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     const audio = $(hostIdFromLink ? 'callerRemoteAudio' : 'remoteAudio');
     audio.muted = false; audio.volume = 1;
   }
+  function sendCallerStatus(peerId, status, position = 0) {
+    const connection = callerDataConnections.get(peerId);
+    if (connection && connection.open) connection.send({ type: 'electra-status', status, position });
+  }
+  function refreshWaitingQueue() {
+    const count = waitingCalls.length;
+    if (count) {
+      show('incoming');
+      setText('queueInfo', count === 1 ? '1 caller is waiting.' : count + ' callers are waiting.');
+      setText('queueNames', 'Accept or reject the next caller in line.');
+      setText('hostStatus', activeCall ? 'Caller connected — ' + count + ' waiting.' : count + ' caller(s) waiting to be accepted.');
+    } else if (!activeCall) {
+      hide('incoming');
+      setText('hostStatus','Ready — waiting for a caller.');
+    }
+  }
+  function updateWaitingPositions() {
+    waitingCalls.forEach((call, index) => sendCallerStatus(call.peer, 'waiting', index + 1));
+  }
   function stopLocalStream() {
     if (localStream) localStream.getTracks().forEach(track => track.stop());
     localStream = null;
@@ -149,9 +171,10 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       setText('callerStatus','Call ended. You can use this same link to call again.');
       if (peer) { peer.destroy(); peer = null; }
     } else {
-      hide('inCall'); hide('incoming');
-      setText('hostStatus','Ready — waiting for the next caller.');
+      hide('inCall');
       $('hostDot').classList.add('live');
+      refreshWaitingQueue();
+      updateWaitingPositions();
     }
   }
   function attachCall(call) {
@@ -210,11 +233,30 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         localStream = await microphone({caller:true});
         peer = new Peer();
         peer.on('open', () => {
-          setText('callerStatus','Calling host… please wait for them to accept.');
-          const call = peer.call(hostIdFromLink, localStream);
-          if (!call) throw new Error('Could not start the call. Please try again.');
-          attachCall(call);
-          show('endCallerBtn');
+          setText('callerStatus','Checking host availability…');
+          callerDataConnection = peer.connect(hostIdFromLink, { reliable: true });
+          callerDataConnection.on('open', () => {
+            callerDataConnection.send({ type: 'electra-hello' });
+            setText('callerStatus','Calling host… please wait. If the host is busy, you will be placed in the waiting line.');
+            const call = peer.call(hostIdFromLink, localStream);
+            if (!call) throw new Error('Could not start the call. Please try again.');
+            attachCall(call);
+            show('endCallerBtn');
+          });
+          callerDataConnection.on('data', message => {
+            if (!message || message.type !== 'electra-status') return;
+            if (message.status === 'waiting') {
+              setText('callerBadge', 'IN WAITING LINE');
+              setText('callerStatus', 'Host is busy. You are number ' + message.position + ' in the waiting line. Please keep this page open.');
+            } else if (message.status === 'connected') {
+              setText('callerBadge', 'HOST ACCEPTED');
+              setText('callerStatus', 'The host is connecting you now…');
+            } else if (message.status === 'declined') {
+              setText('callerBadge', 'CALL DECLINED');
+              setText('callerStatus', 'The host could not take your call. You can try again.');
+            }
+          });
+          callerDataConnection.on('error', () => setText('callerStatus','Connecting to host…'));
         });
         peer.on('error', err => {
           setText('callerStatus','Could not connect: ' + err.message);
@@ -261,18 +303,27 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         };
         setTimeout(retry, 1200);
       });
+      thisPeer.on('connection', connection => {
+        if (peer !== thisPeer) { connection.close(); return; }
+        callerDataConnections.set(connection.peer, connection);
+        connection.on('open', () => {
+          const index = waitingCalls.findIndex(call => call.peer === connection.peer);
+          sendCallerStatus(connection.peer, 'waiting', index >= 0 ? index + 1 : waitingCalls.length + 1);
+        });
+        connection.on('close', () => callerDataConnections.delete(connection.peer));
+        connection.on('error', () => callerDataConnections.delete(connection.peer));
+      });
       thisPeer.on('call', call => {
         if (peer !== thisPeer) { call.close(); return; }
-        // Reject PeerJS IDs previously blocked by the host on this browser.
         const blockedCallerIds = JSON.parse(localStorage.getItem('electraBlockedCallerIds') || '[]');
         if (blockedCallerIds.includes(call.peer)) { call.close(); return; }
-        // Clear references left behind by a caller who disconnected abruptly.
         if (activeCall && activeCall.open === false) callClosed(activeCall);
-        if (incomingCall && incomingCall.open === false) incomingCall = null;
-        if (activeCall || incomingCall) { call.close(); return; }
-        incomingCall = call;
-        show('incoming');
-        setText('hostStatus','Incoming call — accept or reject.');
+        if (waitingCalls.some(existing => existing.peer === call.peer) || (activeCall && activeCall.peer === call.peer)) { call.close(); return; }
+        if (waitingCalls.length >= 5) { sendCallerStatus(call.peer, 'declined'); call.close(); return; }
+        waitingCalls.push(call);
+        sendCallerStatus(call.peer, 'waiting', waitingCalls.length);
+        refreshWaitingQueue();
+        updateWaitingPositions();
         $('hostDot').classList.add('live');
       });
       thisPeer.on('error', err => {
@@ -299,12 +350,13 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('hostMuteBtn').addEventListener('click', () => setMicMuted(!muted));
     $('hostDeafenBtn').addEventListener('click', () => setDeafened(!deafened));
     $('acceptBtn').addEventListener('click', async () => {
-      if (!incomingCall) return;
-      const call = incomingCall;
-      // Move the pending call into activeCall immediately so a later caller
-      // is not blocked by a stale incomingCall reference.
+      if (!waitingCalls.length || activeCall) return;
+      const call = waitingCalls.shift();
       incomingCall = null;
       activeCall = call;
+      sendCallerStatus(call.peer, 'connected');
+      refreshWaitingQueue();
+      updateWaitingPositions();
       $('acceptBtn').disabled = true;
       try {
         localStream = await microphone();
@@ -316,9 +368,11 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       } finally { $('acceptBtn').disabled = false; }
     });
     $('rejectBtn').addEventListener('click', () => {
-      const call = incomingCall; incomingCall = null;
-      if (call) call.close();
-      hide('incoming'); setText('hostStatus','Call declined — waiting for the next caller.');
+      const call = waitingCalls.shift();
+      if (call) { sendCallerStatus(call.peer, 'declined'); call.close(); }
+      incomingCall = waitingCalls[0] || null;
+      refreshWaitingQueue();
+      updateWaitingPositions();
     });
     $('blockHostBtn').addEventListener('click', () => {
       const call = activeCall;
