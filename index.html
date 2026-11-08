@@ -768,7 +768,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       secondCall = null;
       if (extra) { try { extra.close(); } catch {} }
       if (call) { try { call.close(); } catch {} }
-      if (!call) callClosed(null);
+      callClosed(call || null);
     });
   }
 })();
