@@ -327,6 +327,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           if (message.type === 'CALL_REQUEST') {
             if (activeCall || (pendingCallerId && pendingCallerId !== conn.peer)) {
               ignoredCallerIds.add(conn.peer);
+              setText('hostHint', activeCall
+                ? 'Another viewer tried to join while you were on a call.'
+                : 'Another viewer tried to join while another caller was waiting.');
               try { conn.send({ type: 'BUSY' }); } catch {}
               return;
             }
