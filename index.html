@@ -274,6 +274,10 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         // Listen for cancellation immediately, even before the host accepts.
         // PeerJS otherwise leaves a stale incoming-call panel on screen.
         call.on('close', () => {
+          if (activeCall === call) {
+            callClosed(call);
+            return;
+          }
           if (incomingCall !== call) return;
           incomingCall = null;
           hide('incoming');
@@ -343,11 +347,13 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         localStream = await microphone();
         // The caller may hang up while the browser is asking for microphone
         // permission. Never answer a call that is no longer the current request.
-        if (incomingCall !== call || call.open === false) {
+        if (activeCall !== call || call.open === false) {
           stopLocalStream();
+          if (activeCall === call) activeCall = null;
           if (incomingCall === call) incomingCall = null;
           hide('incoming');
           setText('hostStatus','Caller cancelled before you answered — waiting for the next caller.');
+          $('hostDot').classList.add('live');
           return;
         }
         call.answer(localStream);
