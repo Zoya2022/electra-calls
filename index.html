@@ -433,7 +433,8 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               }
               waitingCallerId = conn.peer;
               waitingSignalConn = conn;
-              showHostNotice('🔔 SECOND CALLER WAITING — They will appear here when the current call ends.');
+              showHostNotice('🔔 SECOND CALLER WAITING — You can accept them without ending the current call.');
+              if (waitingCall && waitingCall.peer === conn.peer) show('secondIncoming');
               try { conn.send({ type: 'WAITING' }); } catch {}
               return;
             }
@@ -754,7 +755,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         blockedCallerIds.push(call.peer);
         localStorage.setItem('electraBlockedCallerIds', JSON.stringify(blockedCallerIds));
       }
-      if (secondCall) { try { secondCall.close(); } catch {} }
+      const extra = secondCall;
+      secondCall = null;
+      if (extra) { try { extra.close(); } catch {} }
       call.close();
       callClosed(call);
       setText('hostStatus','Caller ended and blocked on this browser.');
@@ -762,6 +765,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('endHostBtn').addEventListener('click', () => {
       const extra = secondCall;
       const call = activeCall;
+      secondCall = null;
       if (extra) { try { extra.close(); } catch {} }
       if (call) { try { call.close(); } catch {} }
       if (!call) callClosed(null);
