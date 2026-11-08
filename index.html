@@ -465,14 +465,13 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       $('acceptBtn').disabled = true;
       try {
         localStream = await microphone();
-        // The caller may hang up while the browser is asking for microphone
-        // permission. Never answer a call that is no longer the current request.
-        if (activeCall !== call || call.open === false) {
+        // PeerJS incoming MediaConnection.open is not a reliable indicator
+        // that an unanswered call is still valid. It can be false before
+        // answer(), which incorrectly treated every caller as cancelled.
+        // The close handler above clears activeCall if the caller really hangs up.
+        if (activeCall !== call) {
           stopLocalStream();
-          if (activeCall === call) activeCall = null;
-          if (incomingCall === call) incomingCall = null;
           hide('incoming');
-          setText('hostStatus','Caller cancelled before you answered — waiting for the next caller.');
           $('hostDot').classList.add('live');
           return;
         }
