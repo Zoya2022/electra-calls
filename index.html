@@ -74,6 +74,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
 <footer>Browser calling · No viewer account required</footer>
 </main>
 <script src="https://unpkg.com/peerjs@1.5.5/dist/peerjs.min.js"></script>
+<script src="./conference-audio.js"></script>
 <script>
 (() => {
   const $ = id => document.getElementById(id);
@@ -674,18 +675,24 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         secondCall = call; waitingCall = null;
         call.answer(conferenceMixer.outputFor('caller-2'));
         call.on('stream', stream => {
-          if (secondCall !== call) return;
+          if (secondCall !== call && activeCall !== call) return;
           conferenceMixer.addParticipant('caller-2', stream);
-          $('remoteAudio2').srcObject = stream;
-          $('remoteAudio2').volume = Number($('hostVolume').value) / 100;
-          $('remoteAudio2').muted = deafened;
-          $('remoteAudio2').dataset.privateMuted = 'true';
-          $('remoteAudio2').play().catch(() => {});
-          conferenceMixer.setPrivate('caller-1');
-          $('remoteAudio').muted = deafened;
-          show('conferenceControls'); hide('secondIncoming');
-          setText('conferenceStatus','Caller 2 is on hold with waiting music.');
-          setText('hostStatus','Two callers connected — choose a conversation mode.');
+          if (secondCall === call) {
+            $('remoteAudio2').srcObject = stream;
+            $('remoteAudio2').volume = Number($('hostVolume').value) / 100;
+            $('remoteAudio2').muted = deafened;
+            $('remoteAudio2').dataset.privateMuted = 'true';
+            $('remoteAudio2').play().catch(() => {});
+            conferenceMixer.setPrivate('caller-1');
+            $('remoteAudio').muted = deafened;
+            show('conferenceControls'); hide('secondIncoming');
+            setText('conferenceStatus','Caller 2 is on hold with waiting music.');
+            setText('hostStatus','Two callers connected — choose a conversation mode.');
+          } else {
+            $('remoteAudio').srcObject = stream;
+            $('remoteAudio').muted = deafened;
+            $('remoteAudio').play().catch(() => {});
+          }
         });
         call.on('close', () => callClosed(call));
         call.on('error', () => callClosed(call));
@@ -747,14 +754,17 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         blockedCallerIds.push(call.peer);
         localStorage.setItem('electraBlockedCallerIds', JSON.stringify(blockedCallerIds));
       }
+      if (secondCall) { try { secondCall.close(); } catch {} }
       call.close();
       callClosed(call);
       setText('hostStatus','Caller ended and blocked on this browser.');
     });
     $('endHostBtn').addEventListener('click', () => {
+      const extra = secondCall;
       const call = activeCall;
-      if (call) call.close();
-      callClosed(call || null);
+      if (extra) { try { extra.close(); } catch {} }
+      if (call) { try { call.close(); } catch {} }
+      if (!call) callClosed(null);
     });
   }
 })();
