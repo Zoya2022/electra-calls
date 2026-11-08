@@ -21,7 +21,7 @@ Use a host-controlled Web Audio mix for each caller's downlink:
 - For each caller, construct an outgoing mix containing the host microphone plus only the other caller's microphone when in conference mode.
 - In private mode, send the held caller a locally generated waiting-music stream instead of the conversation mix.
 - In conference mode, each caller receives the host plus the other caller. The host hears both callers through separate local audio elements.
-- Caller pages accept the host's additional downlink PeerJS media call and play its received stream without replacing their existing microphone uplink.
+- Each caller keeps the existing bidirectional PeerJS MediaConnection. The host answers that same connection with a per-caller mixed downlink stream; caller-side code remains unchanged.
 
 Use per-participant gain nodes to mute/restore caller audio in each mix. Avoid connecting a caller's own microphone back to them.
 
@@ -38,4 +38,4 @@ Use per-participant gain nodes to mute/restore caller audio in each mix. Avoid c
 
 ## Important limitation
 
-This document records the intended behavior; it does not claim the conference feature is implemented or device-tested.
+The experimental branch now contains the first integration of this design. Static JavaScript parsing and mocked audio-routing checks have passed; real browser/WebRTC device testing is still required before this can be called test-ready.
