@@ -74,6 +74,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   const hostIdFromLink = params.get('host');
   let peer = null, incomingCall = null, activeCall = null, localStream = null, callerSignal = null, pendingCallerId = null, pendingSignalConn = null;
   let callerFinalStatus = null, waitingForSignalAck = false;
+  const ignoredCallerIds = new Set();
   let timerStarted = 0, timerHandle = null, connected = false, muted = false, deafened = false;
   const show = id => $(id).classList.remove('hidden');
   const hide = id => $(id).classList.add('hidden');
@@ -325,6 +326,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           if (!message || typeof message !== 'object') return;
           if (message.type === 'CALL_REQUEST') {
             if (activeCall || (pendingCallerId && pendingCallerId !== conn.peer)) {
+              ignoredCallerIds.add(conn.peer);
               try { conn.send({ type: 'BUSY' }); } catch {}
               return;
             }
@@ -336,6 +338,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               setText('hostStatus','Incoming call — accept or reject.');
             }
           } else if (message.type === 'CANCEL' && pendingCallerId === conn.peer) {
+            ignoredCallerIds.add(conn.peer);
             const cancelled = incomingCall && incomingCall.peer === conn.peer ? incomingCall : null;
             pendingCallerId = null;
             incomingCall = null;
@@ -367,6 +370,13 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       });
       thisPeer.on('call', call => {
         if (peer !== thisPeer) { call.close(); return; }
+        // A media call can arrive after its separate signaling request was
+        // cancelled/rejected. Never let that late call become a stale ring.
+        if (ignoredCallerIds.has(call.peer)) {
+          ignoredCallerIds.delete(call.peer);
+          call.close();
+          return;
+        }
         // Reject PeerJS IDs previously blocked by the host on this browser.
         const blockedCallerIds = JSON.parse(localStorage.getItem('electraBlockedCallerIds') || '[]');
         if (blockedCallerIds.includes(call.peer)) { call.close(); return; }
@@ -475,6 +485,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     });
     $('rejectBtn').addEventListener('click', () => {
       const call = incomingCall;
+      if (pendingCallerId) ignoredCallerIds.add(pendingCallerId);
       // Keep the signaling channel open until the caller confirms receipt.
       if (pendingSignalConn && pendingSignalConn.open) {
         try { pendingSignalConn.send({ type: 'REJECT' }); } catch {}
