@@ -41,7 +41,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
 <p class="small">Keep this host page open during your live. Share this same link with every viewer; it stays the same between calls.</p>
 </div>
 <div id="incoming" class="panel hidden">
-<div class="badge">● INCOMING CALL</div><h2 class="section-title" style="margin-top:14px">Someone wants to join</h2><p class="muted">Accept to bring the viewer on air.</p>
+<div class="badge">● INCOMING CALL</div><h2 class="section-title" style="margin-top:14px">Someone wants to join</h2><p class="muted" id="incomingMessage">Accept to bring the viewer on air.</p>
 <div class="actions"><button class="primary" id="acceptBtn">Accept call</button><button class="danger" id="rejectBtn">Reject</button></div>
 </div>
 <div id="inCall" class="panel hidden">
@@ -151,10 +151,19 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       setText('callerStatus','Call ended. You can use this same link to call again.');
       if (peer && !waitingForSignalAck) { peer.destroy(); peer = null; }
     } else {
-      if (pendingSignalConn) { try { pendingSignalConn.close(); } catch {} pendingSignalConn = null; }
-      pendingCallerId = null;
-      hide('inCall'); hide('incoming');
-      setText('hostStatus','Ready — waiting for the next caller.');
+      // Preserve a second caller's request while the current call ends.
+      if (incomingCall && pendingCallerId === incomingCall.peer) {
+        show('incoming');
+        $('acceptBtn').disabled = false;
+        setText('incomingMessage','The previous call has ended. Accept to bring this caller on air.');
+        setText('hostStatus','Caller waiting — accept the incoming call.');
+      } else {
+        if (pendingSignalConn) { try { pendingSignalConn.close(); } catch {} pendingSignalConn = null; }
+        pendingCallerId = null;
+        hide('incoming');
+        setText('hostStatus','Ready — waiting for the next caller.');
+      }
+      hide('inCall');
       $('hostDot').classList.add('live');
     }
   }
@@ -325,7 +334,8 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         conn.on('data', message => {
           if (!message || typeof message !== 'object') return;
           if (message.type === 'CALL_REQUEST') {
-            if (activeCall || (pendingCallerId && pendingCallerId !== conn.peer)) {
+            // Allow one caller to wait while the host is already on a call.
+            if (pendingCallerId && pendingCallerId !== conn.peer) {
               ignoredCallerIds.add(conn.peer);
               try { conn.send({ type: 'BUSY' }); } catch {}
               return;
@@ -334,8 +344,13 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             pendingSignalConn = conn;
             if (incomingCall && incomingCall.peer === conn.peer) {
               show('incoming');
-              $('acceptBtn').disabled = false;
-              setText('hostStatus','Incoming call — accept or reject.');
+              $('acceptBtn').disabled = !!activeCall;
+              setText('incomingMessage', activeCall
+                ? 'You are already speaking with another caller. This caller is waiting; end the current call before accepting.'
+                : 'Accept to bring the viewer on air.');
+              setText('hostStatus', activeCall
+                ? 'Call waiting — another caller is waiting.'
+                : 'Incoming call — accept or reject.');
             }
           } else if (message.type === 'CANCEL' && pendingCallerId === conn.peer) {
             ignoredCallerIds.add(conn.peer);
@@ -383,7 +398,8 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         // Clear references left behind by a caller who disconnected abruptly.
         if (activeCall && activeCall.open === false) callClosed(activeCall);
         if (incomingCall && incomingCall.open === false) incomingCall = null;
-        if (activeCall || incomingCall) { call.close(); return; }
+        // Keep one incoming caller queued while another call is active.
+        if (incomingCall) { call.close(); return; }
         incomingCall = call;
         // Listen for cancellation immediately, even before the host accepts.
         // PeerJS otherwise leaves a stale incoming-call panel on screen.
@@ -426,8 +442,13 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         // explicit CALL_REQUEST on the reliable data channel.
         if (pendingCallerId === call.peer) {
           show('incoming');
-          $('acceptBtn').disabled = false;
-          setText('hostStatus','Incoming call — accept or reject.');
+          $('acceptBtn').disabled = !!activeCall;
+          setText('incomingMessage', activeCall
+            ? 'You are already speaking with another caller. This caller is waiting; end the current call before accepting.'
+            : 'Accept to bring the viewer on air.');
+          setText('hostStatus', activeCall
+            ? 'Call waiting — another caller is waiting.'
+            : 'Incoming call — accept or reject.');
           $('hostDot').classList.add('live');
         }
       });
