@@ -9,6 +9,9 @@ const assert = require('node:assert/strict');
 class FakeParam {
   constructor(value = 1) { this.value = value; }
   setTargetAtTime(value) { this.value = value; }
+  setValueAtTime(value) { this.value = value; }
+  linearRampToValueAtTime(value) { this.value = value; }
+  cancelScheduledValues() {}
 }
 class FakeNode {
   constructor() { this.connections = []; this.gain = new FakeParam(1); this.frequency = new FakeParam(440); this.type = ''; this.started = false; this.stopped = false; }
@@ -29,7 +32,13 @@ class FakeAudioContext {
 }
 
 const source = fs.readFileSync(new URL('./conference-audio.js', 'file://' + __filename), 'utf8');
-const sandbox = { window: { AudioContext: FakeAudioContext }, Map, Error };
+let nextTimerId = 1;
+const timers = new Map();
+const sandbox = {
+  window: { AudioContext: FakeAudioContext }, Map, Error,
+  setInterval: fn => { const id = nextTimerId++; timers.set(id, fn); return id; },
+  clearInterval: id => timers.delete(id)
+};
 vm.runInNewContext(source, sandbox, { filename: 'conference-audio.js' });
 const Mixer = sandbox.window.ElectraConferenceAudio;
 assert.equal(typeof Mixer, 'function', 'mixer class should be exposed');
