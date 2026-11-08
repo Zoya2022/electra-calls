@@ -332,15 +332,11 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             }
             pendingCallerId = conn.peer;
             pendingSignalConn = conn;
-            // Show the incoming request as soon as the reliable signalling
-            // channel reaches the host. Media-call setup can arrive slightly
-            // later, so do not leave the host looking idle during that gap.
-            show('incoming');
-            const mediaReady = !!(incomingCall && incomingCall.peer === conn.peer);
-            $('acceptBtn').disabled = !mediaReady;
-            setText('hostStatus', mediaReady
-              ? 'Incoming call — accept or reject.'
-              : 'Caller request received — connecting audio…');
+            if (incomingCall && incomingCall.peer === conn.peer) {
+              show('incoming');
+              $('acceptBtn').disabled = false;
+              setText('hostStatus','Incoming call — accept or reject.');
+            }
           } else if (message.type === 'CANCEL' && pendingCallerId === conn.peer) {
             ignoredCallerIds.add(conn.peer);
             const cancelled = incomingCall && incomingCall.peer === conn.peer ? incomingCall : null;
