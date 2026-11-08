@@ -104,48 +104,20 @@
     }
 
     _startHoldMusic(output) {
-      if (output.hold) return;
-      const destination = this.context.createMediaStreamDestination();
-      const master = this.context.createGain();
-      master.gain.value = 0.045;
-      master.connect(destination);
-
-      // A soft, clearly melodic sequence (not a sustained chord/busy signal).
-      const oscillator = this.context.createOscillator();
-      const envelope = this.context.createGain();
-      const notes = [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 783.99, 659.25];
-      oscillator.type = 'sine';
-      envelope.gain.value = 0;
-      oscillator.connect(envelope);
-      envelope.connect(master);
-      const playPhrase = () => {
-        const now = this.context.currentTime + 0.04;
-        notes.forEach((frequency, index) => {
-          const at = now + index * 0.34;
-          oscillator.frequency.setValueAtTime(frequency, at);
-          envelope.gain.cancelScheduledValues(at);
-          envelope.gain.setValueAtTime(0, at);
-          envelope.gain.linearRampToValueAtTime(0.16, at + 0.045);
-          envelope.gain.linearRampToValueAtTime(0, at + 0.27);
-        });
-      };
-      oscillator.start();
-      playPhrase();
-      const phraseTimer = setInterval(playPhrase, 3000);
-      const source = this.context.createMediaStreamSource(destination.stream);
-      source.connect(output.destination);
-      output.hold = { oscillators: [oscillator], source, master, envelope, phraseTimer };
+      // No generated audio on held lines. A held caller hears silence only;
+      // this avoids any tone/music being mistaken for call audio.
+      return;
     }
 
     _stopHoldMusic(output) {
       if (!output.hold) return;
       clearInterval(output.hold.phraseTimer);
-      for (const oscillator of output.hold.oscillators) {
+      for (const oscillator of output.hold.oscillators || []) {
         try { oscillator.stop(); oscillator.disconnect(); } catch {}
       }
-      try { output.hold.envelope.disconnect(); } catch {}
-      try { output.hold.source.disconnect(); } catch {}
-      try { output.hold.master.disconnect(); } catch {}
+      try { output.hold.envelope?.disconnect(); } catch {}
+      try { output.hold.source?.disconnect(); } catch {}
+      try { output.hold.master?.disconnect(); } catch {}
       output.hold = null;
     }
 
