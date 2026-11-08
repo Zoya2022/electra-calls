@@ -161,6 +161,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     deafened = value;
     const audio = $(hostIdFromLink ? 'callerRemoteAudio' : 'remoteAudio');
     audio.muted = value;
+    if (!hostIdFromLink) $('remoteAudio2').muted = value;
     const id = hostIdFromLink ? 'callerDeafenBtn' : 'hostDeafenBtn';
     setText(id, value ? '🔇 Undeafen' : '🔊 Deafen');
     $(id).classList.toggle('active', value);
@@ -691,7 +692,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           if (secondCall === call) {
             $('remoteAudio2').srcObject = stream;
             $('remoteAudio2').volume = Number($('hostVolume').value) / 100;
-            $('remoteAudio2').muted = deafened;
+            $('remoteAudio2').muted = true;
             $('remoteAudio2').dataset.privateMuted = 'true';
             $('remoteAudio2').play().catch(() => {});
             conferenceMixer.setPrivate('caller-1');
