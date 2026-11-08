@@ -271,6 +271,39 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         if (incomingCall && incomingCall.open === false) incomingCall = null;
         if (activeCall || incomingCall) { call.close(); return; }
         incomingCall = call;
+        // Listen for cancellation immediately, even before the host accepts.
+        // PeerJS otherwise leaves a stale incoming-call panel on screen.
+        call.on('close', () => {
+          if (incomingCall !== call) return;
+          incomingCall = null;
+          hide('incoming');
+          $('acceptBtn').disabled = false;
+          setText('hostStatus','Caller cancelled the call — waiting for the next caller.');
+          $('hostDot').classList.add('live');
+        });
+        call.on('error', err => {
+          if (incomingCall !== call) return;
+          incomingCall = null;
+          hide('incoming');
+          $('acceptBtn').disabled = false;
+          setText('hostStatus','Incoming call ended: ' + (err.message || 'connection error'));
+        });
+        // Also catch a peer connection that fails/closes before acceptance.
+        const pendingPc = call.peerConnection;
+        if (pendingPc) {
+          const clearCancelled = () => {
+            if (incomingCall !== call) return;
+            if (pendingPc.connectionState === 'closed' || pendingPc.connectionState === 'failed' ||
+                pendingPc.iceConnectionState === 'closed' || pendingPc.iceConnectionState === 'failed') {
+              incomingCall = null;
+              hide('incoming');
+              $('acceptBtn').disabled = false;
+              setText('hostStatus','Caller disconnected — waiting for the next caller.');
+            }
+          };
+          pendingPc.addEventListener('connectionstatechange', clearCancelled);
+          pendingPc.addEventListener('iceconnectionstatechange', clearCancelled);
+        }
         show('incoming');
         setText('hostStatus','Incoming call — accept or reject.');
         $('hostDot').classList.add('live');
@@ -308,6 +341,15 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       $('acceptBtn').disabled = true;
       try {
         localStream = await microphone();
+        // The caller may hang up while the browser is asking for microphone
+        // permission. Never answer a call that is no longer the current request.
+        if (incomingCall !== call || call.open === false) {
+          stopLocalStream();
+          if (incomingCall === call) incomingCall = null;
+          hide('incoming');
+          setText('hostStatus','Caller cancelled before you answered — waiting for the next caller.');
+          return;
+        }
         call.answer(localStream);
         hide('incoming'); show('inCall'); attachCall(call);
       } catch (error) {
