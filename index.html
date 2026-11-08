@@ -338,7 +338,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         conn.on('data', message => {
           if (!message || typeof message !== 'object') return;
           if (message.type === 'CALL_REQUEST') {
-            if (activeCall || pendingCallerId) {
+            if (activeCall) {
               if (waitingCallerId && waitingCallerId !== conn.peer) {
                 ignoredCallerIds.add(conn.peer);
                 try { conn.send({ type: 'BUSY' }); } catch {}
@@ -346,9 +346,12 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               }
               waitingCallerId = conn.peer;
               waitingSignalConn = conn;
-              setText('hostHint', activeCall
-                ? 'One caller is waiting. They will appear here when the current call ends.'
-                : 'One caller is waiting behind the incoming call.');
+              setText('hostHint','One caller is waiting. They will appear here when the current call ends.');
+              return;
+            }
+            if (pendingCallerId && pendingCallerId !== conn.peer) {
+              ignoredCallerIds.add(conn.peer);
+              try { conn.send({ type: 'BUSY' }); } catch {}
               return;
             }
             pendingCallerId = conn.peer;
