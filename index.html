@@ -79,6 +79,28 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   const show = id => $(id).classList.remove('hidden');
   const hide = id => $(id).classList.add('hidden');
   const setText = (id, value) => { $(id).textContent = value; };
+  let hostNoticeTimer = null;
+  function showHostNotice(message, duration = 0) {
+    if (hostNoticeTimer) clearTimeout(hostNoticeTimer);
+    hostNoticeTimer = null;
+    setText('hostHint', message);
+    $('hostHint').classList.add('notice');
+    if (duration > 0) {
+      hostNoticeTimer = setTimeout(() => {
+        if ($('hostHint').textContent === message) {
+          setText('hostHint', '');
+          $('hostHint').classList.remove('notice');
+        }
+        hostNoticeTimer = null;
+      }, duration);
+    }
+  }
+  function clearHostNotice() {
+    if (hostNoticeTimer) clearTimeout(hostNoticeTimer);
+    hostNoticeTimer = null;
+    setText('hostHint', '');
+    $('hostHint').classList.remove('notice');
+  }
   const formatTime = ms => {
     const total = Math.floor(ms / 1000), minutes = Math.floor(total / 60), seconds = total % 60;
     return String(minutes).padStart(2,'0') + ':' + String(seconds).padStart(2,'0');
@@ -167,9 +189,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         show('incoming');
         $('acceptBtn').disabled = false;
         setText('hostStatus','Caller is ready — accept the waiting caller.');
-        setText('hostHint','Your waiting caller is ready. Accept the call to bring them on air.');
-        const notice = 'Your waiting caller is ready. Accept the call to bring them on air.';
-        setTimeout(() => { if ($('hostHint').textContent === notice) setText('hostHint',''); }, 8000);
+        showHostNotice('Your waiting caller is ready. Accept the call to bring them on air.', 8000);
       } else if (waitingCallerId) {
         // The queue request can arrive before its media call. Keep the queue
         // state so the media call can be promoted when it arrives.
@@ -492,9 +512,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           show('incoming');
           $('acceptBtn').disabled = false;
           setText('hostStatus','Your waiting caller is ready — accept the call.');
-          setText('hostHint','Your waiting caller is ready. Accept the call to bring them on air.');
-          const notice = 'Your waiting caller is ready. Accept the call to bring them on air.';
-          setTimeout(() => { if ($('hostHint').textContent === notice) setText('hostHint',''); }, 8000);
+          showHostNotice('Your waiting caller is ready. Accept the call to bring them on air.', 8000);
           return;
         }
         if (incomingCall) { call.close(); return; }
@@ -570,6 +588,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('hostDeafenBtn').addEventListener('click', () => setDeafened(!deafened));
     $('acceptBtn').addEventListener('click', async () => {
       if (!incomingCall || incomingCall.peer !== pendingCallerId) return;
+      clearHostNotice();
       const call = incomingCall;
       // Move the pending call into activeCall immediately so a later caller
       // is not blocked by a stale incomingCall reference.
