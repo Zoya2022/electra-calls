@@ -73,6 +73,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   const params = new URLSearchParams(location.search);
   const hostIdFromLink = params.get('host');
   let peer = null, incomingCall = null, activeCall = null, localStream = null, callerSignal = null, pendingCallerId = null, pendingSignalConn = null;
+  let callerFinalStatus = null, waitingForSignalAck = false;
   let timerStarted = 0, timerHandle = null, connected = false, muted = false, deafened = false;
   const show = id => $(id).classList.remove('hidden');
   const hide = id => $(id).classList.add('hidden');
@@ -147,8 +148,10 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       $('callBtn').disabled = false;
       setText('callerBadge','READY FOR NEXT CALLER');
       setText('callerStatus','Call ended. You can use this same link to call again.');
-      if (peer) { peer.destroy(); peer = null; }
+      if (peer && !waitingForSignalAck) { peer.destroy(); peer = null; }
     } else {
+      if (pendingSignalConn) { try { pendingSignalConn.close(); } catch {} pendingSignalConn = null; }
+      pendingCallerId = null;
       hide('inCall'); hide('incoming');
       setText('hostStatus','Ready — waiting for the next caller.');
       $('hostDot').classList.add('live');
@@ -226,32 +229,37 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           callerSignal.on('data', message => {
             if (!message || typeof message !== 'object') return;
             if (message.type === 'REJECT') {
+              callerFinalStatus = { badge: 'CALL DECLINED', text: 'The host declined your call. You can try again.' };
+              waitingForSignalAck = true;
+              try { callerSignal.send({ type: 'REJECT_ACK' }); } catch {}
               const call = activeCall;
-              setText('callerBadge','CALL DECLINED');
-              setText('callerStatus','The host declined your call. You can try again.');
               if (call) { try { call.close(); } catch {} }
-              if (callerSignal) { try { callerSignal.close(); } catch {} callerSignal = null; }
               callClosed(call || null);
-              setText('callerBadge','CALL DECLINED');
-              setText('callerStatus','The host declined your call. You can try again.');
             } else if (message.type === 'BUSY') {
-              setText('callerBadge','HOST BUSY');
-              setText('callerStatus','The host is already on another call. Please try again later.');
+              callerFinalStatus = { badge: 'HOST BUSY', text: 'The host is already on another call. Please try again later.' };
+              waitingForSignalAck = true;
+              try { callerSignal.send({ type: 'BUSY_ACK' }); } catch {}
               const call = activeCall;
               if (call) { try { call.close(); } catch {} }
-              if (callerSignal) { try { callerSignal.close(); } catch {} callerSignal = null; }
               callClosed(call || null);
-              setText('callerBadge','HOST BUSY');
-              setText('callerStatus','The host is already on another call. Please try again later.');
+            } else if (message.type === 'CANCEL_ACK') {
+              try { callerSignal.send({ type: 'CANCEL_DONE' }); } catch {}
             }
           });
           callerSignal.on('close', () => {
             if (activeCall) return;
+            waitingForSignalAck = false;
             if (peer) { peer.destroy(); peer = null; }
+            callerSignal = null;
             stopLocalStream();
             $('callBtn').disabled = false;
-            setText('callerBadge','CALL ENDED');
-            setText('callerStatus','The call request ended. You can try again.');
+            if (callerFinalStatus) {
+              setText('callerBadge',callerFinalStatus.badge);
+              setText('callerStatus',callerFinalStatus.text);
+            } else {
+              setText('callerBadge','CALL ENDED');
+              setText('callerStatus','The call request ended. You can try again.');
+            }
           });
           callerSignal.on('error', err => {
             setText('callerStatus','Could not contact host: ' + err.message);
@@ -271,12 +279,12 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       }
     });
     $('endCallerBtn').addEventListener('click', () => {
-      // Explicitly tell the host to clear the ringing request; closing a
-      // WebRTC media call alone is not a reliable pre-answer cancellation.
+      // Three-step cancellation: CANCEL -> CANCEL_ACK -> CANCEL_DONE.
+      callerFinalStatus = { badge: 'CALL ENDED', text: 'You ended the call. You can call again using this link.' };
+      waitingForSignalAck = true;
       try { if (callerSignal && callerSignal.open) callerSignal.send({ type: 'CANCEL' }); } catch {}
       const call = activeCall;
-      if (call) call.close();
-      if (callerSignal) { try { callerSignal.close(); } catch {} callerSignal = null; }
+      if (call) { try { call.close(); } catch {} }
       callClosed(call || null);
     });
   } else {
@@ -318,7 +326,6 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           if (message.type === 'CALL_REQUEST') {
             if (activeCall || (pendingCallerId && pendingCallerId !== conn.peer)) {
               try { conn.send({ type: 'BUSY' }); } catch {}
-              conn.close();
               return;
             }
             pendingCallerId = conn.peer;
@@ -329,15 +336,18 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               setText('hostStatus','Incoming call — accept or reject.');
             }
           } else if (message.type === 'CANCEL' && pendingCallerId === conn.peer) {
-            pendingCallerId = null;
-            pendingSignalConn = null;
             const cancelled = incomingCall && incomingCall.peer === conn.peer ? incomingCall : null;
+            pendingCallerId = null;
             incomingCall = null;
             hide('incoming');
             $('acceptBtn').disabled = false;
             if (cancelled) { try { cancelled.close(); } catch {} }
             setText('hostStatus','Caller cancelled — waiting for the next caller.');
             $('hostDot').classList.add('live');
+            try { conn.send({ type: 'CANCEL_ACK' }); } catch {}
+          } else if (message.type === 'CANCEL_DONE' || message.type === 'REJECT_ACK' || message.type === 'BUSY_ACK') {
+            if (pendingSignalConn === conn) pendingSignalConn = null;
+            try { conn.close(); } catch {}
           }
         });
         conn.on('close', () => {
@@ -465,12 +475,10 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     });
     $('rejectBtn').addEventListener('click', () => {
       const call = incomingCall;
-      // Tell the caller explicitly that the host rejected the request.
+      // Keep the signaling channel open until the caller confirms receipt.
       if (pendingSignalConn && pendingSignalConn.open) {
         try { pendingSignalConn.send({ type: 'REJECT' }); } catch {}
-        try { pendingSignalConn.close(); } catch {}
       }
-      pendingSignalConn = null;
       pendingCallerId = null;
       incomingCall = null;
       if (call) { try { call.close(); } catch {} }
