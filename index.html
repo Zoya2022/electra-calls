@@ -81,6 +81,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   const params = new URLSearchParams(location.search);
   const hostIdFromLink = params.get('host');
   let peer = null, incomingCall = null, activeCall = null, waitingCall = null, localStream = null, callerSignal = null, pendingCallerId = null, pendingSignalConn = null, waitingCallerId = null, waitingSignalConn = null;
+  let conferenceMixer = null;
   let callerFinalStatus = null, waitingForSignalAck = false;
   const ignoredCallerIds = new Set();
   let timerStarted = 0, timerHandle = null, connected = false, muted = false, deafened = false;
@@ -210,7 +211,8 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     if (!call || activeCall === call) activeCall = null;
     if (!call || incomingCall === call) incomingCall = null;
     connected = false; stopTimer(); stopLocalStream(); resetLocalControls();
-    $('remoteAudio').srcObject = null; $('callerRemoteAudio').srcObject = null;
+    if (!hostIdFromLink && conferenceMixer) { conferenceMixer.dispose(); conferenceMixer = null; }
+    $('remoteAudio').srcObject = null; $('remoteAudio2').srcObject = null; $('callerRemoteAudio').srcObject = null;
     if (hostIdFromLink) {
       hide('callerInCall'); setCallerActions(false);
       $('callBtn').disabled = false;
@@ -257,6 +259,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         setText('callerBadge','CONNECTED');
         setText('callerStatus','You are connected. Say hello!');
       } else {
+        if (conferenceMixer) conferenceMixer.addParticipant('caller-1', stream);
         show('inCall'); hide('incoming');
         setText('hostStatus','Caller connected — you are live.');
         $('hostDot').classList.add('live');
@@ -532,7 +535,8 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             hide('secondIncoming');
           });
           if (waitingCallerId === call.peer) {
-            setText('hostHint','One caller is waiting. They will appear here when the current call ends.');
+            show('secondIncoming');
+            setText('hostHint','One caller is waiting. You can accept them without ending the current call.');
           }
           return;
         }
@@ -653,6 +657,8 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       $('acceptBtn').disabled = true;
       try {
         localStream = await microphone();
+        conferenceMixer = new ElectraConferenceAudio(localStream);
+        await conferenceMixer.resume();
         // PeerJS incoming MediaConnection.open is not a reliable indicator
         // that an unanswered call is still valid. It can be false before
         // answer(), which incorrectly treated every caller as cancelled.
@@ -663,9 +669,10 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           $('hostDot').classList.add('live');
           return;
         }
-        call.answer(localStream);
+        call.answer(conferenceMixer.outputFor('caller-1'));
         hide('incoming'); show('inCall'); attachCall(call);
       } catch (error) {
+        if (conferenceMixer) { conferenceMixer.dispose(); conferenceMixer = null; }
         setText('hostStatus',error.message || 'Microphone permission was not granted.');
         call.close(); callClosed(call);
       } finally { $('acceptBtn').disabled = false; }
