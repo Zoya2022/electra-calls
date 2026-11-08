@@ -15,7 +15,7 @@ main{width:min(100%,680px)}.brand{text-align:center;margin-bottom:22px}.eyebrow{
 .status{font-weight:650;color:#dce5f7;margin:12px 0 4px;min-height:1.4em}.muted{color:var(--muted)}.small{font-size:.83rem;color:var(--muted);line-height:1.5}
 .linkbox{background:#0a1020;border:1px solid #34425f;border-radius:13px;padding:13px;margin:10px 0;overflow-wrap:anywhere;color:#c8c0ff;font-size:.9rem;line-height:1.5}
 button{border:0;border-radius:12px;padding:12px 17px;font:700 .94rem inherit;cursor:pointer;transition:transform .15s,filter .15s}button:hover{filter:brightness(1.1);transform:translateY(-1px)}button:disabled{opacity:.45;cursor:not-allowed;transform:none}
-.primary{background:linear-gradient(135deg,#a99aff,#8069e8);color:#100d25}.secondary{background:#26334b;color:#f5f7ff;border:1px solid #3a4965}.danger{background:#542536;color:#ffdce3;border:1px solid #84364d}.success{background:#153e37;color:#b8ffe8;border:1px solid #286e5c}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}
+.primary{background:linear-gradient(135deg,#a99aff,#8069e8);color:#100d25}.secondary{background:#26334b;color:#f5f7ff;border:1px solid #3a4965}.danger{background:#542536;color:#ffdce3;border:1px solid #84364d}.danger.caller-end{background:linear-gradient(135deg,#ff647c,#dc3158);color:#fff;border:1px solid #ff91a3;box-shadow:0 0 0 1px #ff647c33,0 5px 18px #ff315844}.success{background:#153e37;color:#b8ffe8;border:1px solid #286e5c}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}
 .section-title{font-size:1.04rem;font-weight:750;margin:0 0 5px}.timer{font-variant-numeric:tabular-nums;font-size:2.35rem;font-weight:750;letter-spacing:.04em;margin:10px 0}
 .controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:16px}.control{background:#202c42;border:1px solid #34435d;color:#eef2ff;padding:14px 12px}.control.active{background:#573044;border-color:#a64a69;color:#ffe3ea}.volume{margin-top:17px}.volume label{display:flex;justify-content:space-between;color:var(--muted);font-size:.85rem;margin-bottom:9px}input[type=range]{width:100%;accent-color:#a99aff}
 .link-panel summary{cursor:pointer;list-style:none;color:#c8c0ff;font-size:.82rem;font-weight:800;letter-spacing:.04em;outline:none}
@@ -273,6 +273,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             if (!callerSignal || !callerSignal.open) return;
             callerSignal.send({ type: 'CALL_REQUEST' });
             setText('callerStatus','Calling host… please wait for them to accept.');
+            hide('callBtn'); show('endCallerBtn');
             const call = peer.call(hostIdFromLink, localStream);
             if (!call) throw new Error('Could not start the call. Please try again.');
             attachCall(call);
@@ -288,6 +289,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               if (call) { try { call.close(); } catch {} }
               callClosed(call || null);
             } else if (message.type === 'WAITING') {
+              hide('callBtn'); show('endCallerBtn');
               setText('callerBadge','YOU ARE IN THE QUEUE');
               setText('callerStatus','You are waiting for the current conversation to finish. Please stay on this page.');
             } else if (message.type === 'YOUR_TURN') {
