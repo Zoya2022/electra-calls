@@ -139,7 +139,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   function callClosed(call) {
     // Cleanup must be safe to call from the button, PeerJS close event,
     // and the underlying WebRTC connection-state event.
-    if (call && activeCall && activeCall !== call) return;
+    // Ignore duplicate close/error callbacks after this call was already cleaned up.
+    // Without this strict identity guard, a second callback can hide a newly promoted waiting caller.
+    if (call && activeCall !== call) return;
     if (!call || activeCall === call) activeCall = null;
     if (!call || incomingCall === call) incomingCall = null;
     connected = false; stopTimer(); stopLocalStream(); resetLocalControls();
