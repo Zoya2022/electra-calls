@@ -60,12 +60,12 @@ assert.equal(first.hostGain.gain.value, 1, 'active caller 1 should hear host');
 assert.equal(second.hostGain.gain.value, 0, 'held caller 2 must not hear host');
 assert.equal(first.participantGains.get('caller-2').gain.value, 0, 'caller 1 must not hear caller 2 in private mode');
 assert.equal(second.participantGains.get('caller-1').gain.value, 0, 'caller 2 must not hear caller 1 in private mode');
-assert.ok(second.hold, 'held caller 2 should receive waiting music');
+assert.equal(second.hold, null, 'held caller 2 should hear silence, not generated music');
 
 mixer.setPrivate('caller-2');
 assert.equal(first.hostGain.gain.value, 0, 'caller 1 should be held after switching');
 assert.equal(second.hostGain.gain.value, 1, 'caller 2 should hear host after switching');
-assert.ok(first.hold, 'caller 1 should receive waiting music after switching');
+assert.equal(first.hold, null, 'held caller 1 should hear silence, not generated music');
 assert.equal(second.hold, null, 'waiting music should stop for caller 2');
 
 mixer.setConference();
