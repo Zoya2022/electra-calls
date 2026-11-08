@@ -456,6 +456,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             waitingCallerId = null;
             waitingSignalConn = null;
             if (cancelledWaiting) { waitingCall = null; try { cancelledWaiting.close(); } catch {} }
+            hide('secondIncoming');
             showHostNotice('The waiting caller cancelled.', 5000);
             try { conn.send({ type: 'CANCEL_ACK' }); } catch {}
           } else if (message.type === 'CANCEL' && pendingCallerId === conn.peer) {
@@ -523,10 +524,12 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               waitingCallerId = null;
               if (waitingSignalConn) { try { waitingSignalConn.close(); } catch {} waitingSignalConn = null; }
             }
+            hide('secondIncoming');
             setText('hostHint','');
           });
           call.on('error', () => {
             if (waitingCall === call) waitingCall = null;
+            hide('secondIncoming');
           });
           if (waitingCallerId === call.peer) {
             setText('hostHint','One caller is waiting. They will appear here when the current call ends.');
