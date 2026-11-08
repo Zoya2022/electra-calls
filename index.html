@@ -72,7 +72,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const hostIdFromLink = params.get('host');
-  let peer = null, incomingCall = null, activeCall = null, localStream = null, callerSignal = null, pendingCallerId = null;
+  let peer = null, incomingCall = null, activeCall = null, localStream = null, callerSignal = null, pendingCallerId = null, pendingSignalConn = null;
   let timerStarted = 0, timerHandle = null, connected = false, muted = false, deafened = false;
   const show = id => $(id).classList.remove('hidden');
   const hide = id => $(id).classList.add('hidden');
@@ -223,6 +223,36 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             attachCall(call);
             show('endCallerBtn');
           });
+          callerSignal.on('data', message => {
+            if (!message || typeof message !== 'object') return;
+            if (message.type === 'REJECT') {
+              const call = activeCall;
+              setText('callerBadge','CALL DECLINED');
+              setText('callerStatus','The host declined your call. You can try again.');
+              if (call) { try { call.close(); } catch {} }
+              if (callerSignal) { try { callerSignal.close(); } catch {} callerSignal = null; }
+              callClosed(call || null);
+              setText('callerBadge','CALL DECLINED');
+              setText('callerStatus','The host declined your call. You can try again.');
+            } else if (message.type === 'BUSY') {
+              setText('callerBadge','HOST BUSY');
+              setText('callerStatus','The host is already on another call. Please try again later.');
+              const call = activeCall;
+              if (call) { try { call.close(); } catch {} }
+              if (callerSignal) { try { callerSignal.close(); } catch {} callerSignal = null; }
+              callClosed(call || null);
+              setText('callerBadge','HOST BUSY');
+              setText('callerStatus','The host is already on another call. Please try again later.');
+            }
+          });
+          callerSignal.on('close', () => {
+            if (activeCall) return;
+            if (peer) { peer.destroy(); peer = null; }
+            stopLocalStream();
+            $('callBtn').disabled = false;
+            setText('callerBadge','CALL ENDED');
+            setText('callerStatus','The call request ended. You can try again.');
+          });
           callerSignal.on('error', err => {
             setText('callerStatus','Could not contact host: ' + err.message);
             $('callBtn').disabled = false;
@@ -292,6 +322,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               return;
             }
             pendingCallerId = conn.peer;
+            pendingSignalConn = conn;
             if (incomingCall && incomingCall.peer === conn.peer) {
               show('incoming');
               $('acceptBtn').disabled = false;
@@ -299,6 +330,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             }
           } else if (message.type === 'CANCEL' && pendingCallerId === conn.peer) {
             pendingCallerId = null;
+            pendingSignalConn = null;
             const cancelled = incomingCall && incomingCall.peer === conn.peer ? incomingCall : null;
             incomingCall = null;
             hide('incoming');
@@ -311,6 +343,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         conn.on('close', () => {
           if (pendingCallerId === conn.peer && !activeCall) {
             pendingCallerId = null;
+            pendingSignalConn = null;
             if (incomingCall && incomingCall.peer === conn.peer) {
               const cancelled = incomingCall;
               incomingCall = null;
@@ -431,9 +464,19 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       } finally { $('acceptBtn').disabled = false; }
     });
     $('rejectBtn').addEventListener('click', () => {
-      const call = incomingCall; incomingCall = null;
-      if (call) call.close();
-      hide('incoming'); setText('hostStatus','Call declined — waiting for the next caller.');
+      const call = incomingCall;
+      // Tell the caller explicitly that the host rejected the request.
+      if (pendingSignalConn && pendingSignalConn.open) {
+        try { pendingSignalConn.send({ type: 'REJECT' }); } catch {}
+        try { pendingSignalConn.close(); } catch {}
+      }
+      pendingSignalConn = null;
+      pendingCallerId = null;
+      incomingCall = null;
+      if (call) { try { call.close(); } catch {} }
+      hide('incoming');
+      $('acceptBtn').disabled = false;
+      setText('hostStatus','Call declined — waiting for the next caller.');
     });
     $('blockHostBtn').addEventListener('click', () => {
       const call = activeCall;
