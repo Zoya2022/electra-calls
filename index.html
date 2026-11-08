@@ -72,9 +72,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const hostIdFromLink = params.get('host');
-  let peer = null, incomingCall = null, activeCall = null, localStream = null, callerSignal = null, pendingCallerId = null, pendingSignalConn = null;
-  let callerFinalStatus = null, waitingForSignalAck = false;
-  const ignoredCallerIds = new Set();
+  let peer = null, incomingCall = null, activeCall = null, localStream = null;
   let timerStarted = 0, timerHandle = null, connected = false, muted = false, deafened = false;
   const show = id => $(id).classList.remove('hidden');
   const hide = id => $(id).classList.add('hidden');
@@ -149,10 +147,8 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       $('callBtn').disabled = false;
       setText('callerBadge','READY FOR NEXT CALLER');
       setText('callerStatus','Call ended. You can use this same link to call again.');
-      if (peer && !waitingForSignalAck) { peer.destroy(); peer = null; }
+      if (peer) { peer.destroy(); peer = null; }
     } else {
-      if (pendingSignalConn) { try { pendingSignalConn.close(); } catch {} pendingSignalConn = null; }
-      pendingCallerId = null;
       hide('inCall'); hide('incoming');
       setText('hostStatus','Ready — waiting for the next caller.');
       $('hostDot').classList.add('live');
@@ -214,59 +210,11 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         localStream = await microphone({caller:true});
         peer = new Peer();
         peer.on('open', () => {
-          setText('callerStatus','Contacting host…');
-          // Establish a reliable data channel first. The host only displays
-          // an incoming notification after receiving this explicit request.
-          callerSignal = peer.connect(hostIdFromLink, { reliable: true });
-          callerSignal.on('open', () => {
-            if (!callerSignal || !callerSignal.open) return;
-            callerSignal.send({ type: 'CALL_REQUEST' });
-            setText('callerStatus','Calling host… please wait for them to accept.');
-            const call = peer.call(hostIdFromLink, localStream);
-            if (!call) throw new Error('Could not start the call. Please try again.');
-            attachCall(call);
-            show('endCallerBtn');
-          });
-          callerSignal.on('data', message => {
-            if (!message || typeof message !== 'object') return;
-            if (message.type === 'REJECT') {
-              callerFinalStatus = { badge: 'CALL DECLINED', text: 'The host declined your call. You can try again.' };
-              waitingForSignalAck = true;
-              try { callerSignal.send({ type: 'REJECT_ACK' }); } catch {}
-              const call = activeCall;
-              if (call) { try { call.close(); } catch {} }
-              callClosed(call || null);
-            } else if (message.type === 'BUSY') {
-              callerFinalStatus = { badge: 'HOST BUSY', text: 'The host is already on another call. Please try again later.' };
-              waitingForSignalAck = true;
-              try { callerSignal.send({ type: 'BUSY_ACK' }); } catch {}
-              const call = activeCall;
-              if (call) { try { call.close(); } catch {} }
-              callClosed(call || null);
-            } else if (message.type === 'CANCEL_ACK') {
-              try { callerSignal.send({ type: 'CANCEL_DONE' }); } catch {}
-            }
-          });
-          callerSignal.on('close', () => {
-            if (activeCall) return;
-            waitingForSignalAck = false;
-            if (peer) { peer.destroy(); peer = null; }
-            callerSignal = null;
-            stopLocalStream();
-            $('callBtn').disabled = false;
-            if (callerFinalStatus) {
-              setText('callerBadge',callerFinalStatus.badge);
-              setText('callerStatus',callerFinalStatus.text);
-            } else {
-              setText('callerBadge','CALL ENDED');
-              setText('callerStatus','The call request ended. You can try again.');
-            }
-          });
-          callerSignal.on('error', err => {
-            setText('callerStatus','Could not contact host: ' + err.message);
-            $('callBtn').disabled = false;
-            stopLocalStream();
-          });
+          setText('callerStatus','Calling host… please wait for them to accept.');
+          const call = peer.call(hostIdFromLink, localStream);
+          if (!call) throw new Error('Could not start the call. Please try again.');
+          attachCall(call);
+          show('endCallerBtn');
         });
         peer.on('error', err => {
           setText('callerStatus','Could not connect: ' + err.message);
@@ -280,12 +228,8 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       }
     });
     $('endCallerBtn').addEventListener('click', () => {
-      // Three-step cancellation: CANCEL -> CANCEL_ACK -> CANCEL_DONE.
-      callerFinalStatus = { badge: 'CALL ENDED', text: 'You ended the call. You can call again using this link.' };
-      waitingForSignalAck = true;
-      try { if (callerSignal && callerSignal.open) callerSignal.send({ type: 'CANCEL' }); } catch {}
       const call = activeCall;
-      if (call) { try { call.close(); } catch {} }
+      if (call) call.close();
       callClosed(call || null);
     });
   } else {
@@ -317,66 +261,8 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         };
         setTimeout(retry, 1200);
       });
-      // Reliable data channel carries explicit ring/cancel events. PeerJS
-      // media-call close events alone cannot reliably signal a caller hanging
-      // up before the host answers.
-      thisPeer.on('connection', conn => {
-        if (peer !== thisPeer) { conn.close(); return; }
-        conn.on('data', message => {
-          if (!message || typeof message !== 'object') return;
-          if (message.type === 'CALL_REQUEST') {
-            if (activeCall || (pendingCallerId && pendingCallerId !== conn.peer)) {
-              ignoredCallerIds.add(conn.peer);
-              try { conn.send({ type: 'BUSY' }); } catch {}
-              return;
-            }
-            pendingCallerId = conn.peer;
-            pendingSignalConn = conn;
-            if (incomingCall && incomingCall.peer === conn.peer) {
-              show('incoming');
-              $('acceptBtn').disabled = false;
-              setText('hostStatus','Incoming call — accept or reject.');
-            }
-          } else if (message.type === 'CANCEL' && pendingCallerId === conn.peer) {
-            ignoredCallerIds.add(conn.peer);
-            const cancelled = incomingCall && incomingCall.peer === conn.peer ? incomingCall : null;
-            pendingCallerId = null;
-            incomingCall = null;
-            hide('incoming');
-            $('acceptBtn').disabled = false;
-            if (cancelled) { try { cancelled.close(); } catch {} }
-            setText('hostStatus','Caller cancelled — waiting for the next caller.');
-            $('hostDot').classList.add('live');
-            try { conn.send({ type: 'CANCEL_ACK' }); } catch {}
-          } else if (message.type === 'CANCEL_DONE' || message.type === 'REJECT_ACK' || message.type === 'BUSY_ACK') {
-            if (pendingSignalConn === conn) pendingSignalConn = null;
-            try { conn.close(); } catch {}
-          }
-        });
-        conn.on('close', () => {
-          if (pendingCallerId === conn.peer && !activeCall) {
-            pendingCallerId = null;
-            pendingSignalConn = null;
-            if (incomingCall && incomingCall.peer === conn.peer) {
-              const cancelled = incomingCall;
-              incomingCall = null;
-              try { cancelled.close(); } catch {}
-            }
-            hide('incoming');
-            $('acceptBtn').disabled = false;
-            setText('hostStatus','Caller disconnected — waiting for the next caller.');
-          }
-        });
-      });
       thisPeer.on('call', call => {
         if (peer !== thisPeer) { call.close(); return; }
-        // A media call can arrive after its separate signaling request was
-        // cancelled/rejected. Never let that late call become a stale ring.
-        if (ignoredCallerIds.has(call.peer)) {
-          ignoredCallerIds.delete(call.peer);
-          call.close();
-          return;
-        }
         // Reject PeerJS IDs previously blocked by the host on this browser.
         const blockedCallerIds = JSON.parse(localStorage.getItem('electraBlockedCallerIds') || '[]');
         if (blockedCallerIds.includes(call.peer)) { call.close(); return; }
@@ -385,51 +271,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         if (incomingCall && incomingCall.open === false) incomingCall = null;
         if (activeCall || incomingCall) { call.close(); return; }
         incomingCall = call;
-        // Listen for cancellation immediately, even before the host accepts.
-        // PeerJS otherwise leaves a stale incoming-call panel on screen.
-        call.on('close', () => {
-          if (activeCall === call) {
-            callClosed(call);
-            return;
-          }
-          if (incomingCall !== call) return;
-          incomingCall = null;
-          hide('incoming');
-          $('acceptBtn').disabled = false;
-          setText('hostStatus','Caller cancelled the call — waiting for the next caller.');
-          $('hostDot').classList.add('live');
-        });
-        call.on('error', err => {
-          if (incomingCall !== call) return;
-          incomingCall = null;
-          hide('incoming');
-          $('acceptBtn').disabled = false;
-          setText('hostStatus','Incoming call ended: ' + (err.message || 'connection error'));
-        });
-        // Also catch a peer connection that fails/closes before acceptance.
-        const pendingPc = call.peerConnection;
-        if (pendingPc) {
-          const clearCancelled = () => {
-            if (incomingCall !== call) return;
-            if (pendingPc.connectionState === 'closed' || pendingPc.connectionState === 'failed' ||
-                pendingPc.iceConnectionState === 'closed' || pendingPc.iceConnectionState === 'failed') {
-              incomingCall = null;
-              hide('incoming');
-              $('acceptBtn').disabled = false;
-              setText('hostStatus','Caller disconnected — waiting for the next caller.');
-            }
-          };
-          pendingPc.addEventListener('connectionstatechange', clearCancelled);
-          pendingPc.addEventListener('iceconnectionstatechange', clearCancelled);
-        }
-        // Do not ring from a media call alone. Wait for the matching
-        // explicit CALL_REQUEST on the reliable data channel.
-        if (pendingCallerId === call.peer) {
-          show('incoming');
-          $('acceptBtn').disabled = false;
-          setText('hostStatus','Incoming call — accept or reject.');
-          $('hostDot').classList.add('live');
-        }
+        show('incoming');
+        setText('hostStatus','Incoming call — accept or reject.');
+        $('hostDot').classList.add('live');
       });
       thisPeer.on('error', err => {
         if (peer !== thisPeer) return;
@@ -455,27 +299,15 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('hostMuteBtn').addEventListener('click', () => setMicMuted(!muted));
     $('hostDeafenBtn').addEventListener('click', () => setDeafened(!deafened));
     $('acceptBtn').addEventListener('click', async () => {
-      if (!incomingCall || incomingCall.peer !== pendingCallerId) return;
+      if (!incomingCall) return;
       const call = incomingCall;
       // Move the pending call into activeCall immediately so a later caller
       // is not blocked by a stale incomingCall reference.
       incomingCall = null;
-      pendingCallerId = null;
       activeCall = call;
       $('acceptBtn').disabled = true;
       try {
         localStream = await microphone();
-        // The caller may hang up while the browser is asking for microphone
-        // permission. Never answer a call that is no longer the current request.
-        if (activeCall !== call || call.open === false) {
-          stopLocalStream();
-          if (activeCall === call) activeCall = null;
-          if (incomingCall === call) incomingCall = null;
-          hide('incoming');
-          setText('hostStatus','Caller cancelled before you answered — waiting for the next caller.');
-          $('hostDot').classList.add('live');
-          return;
-        }
         call.answer(localStream);
         hide('incoming'); show('inCall'); attachCall(call);
       } catch (error) {
@@ -484,18 +316,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       } finally { $('acceptBtn').disabled = false; }
     });
     $('rejectBtn').addEventListener('click', () => {
-      const call = incomingCall;
-      if (pendingCallerId) ignoredCallerIds.add(pendingCallerId);
-      // Keep the signaling channel open until the caller confirms receipt.
-      if (pendingSignalConn && pendingSignalConn.open) {
-        try { pendingSignalConn.send({ type: 'REJECT' }); } catch {}
-      }
-      pendingCallerId = null;
-      incomingCall = null;
-      if (call) { try { call.close(); } catch {} }
-      hide('incoming');
-      $('acceptBtn').disabled = false;
-      setText('hostStatus','Call declined — waiting for the next caller.');
+      const call = incomingCall; incomingCall = null;
+      if (call) call.close();
+      hide('incoming'); setText('hostStatus','Call declined — waiting for the next caller.');
     });
     $('blockHostBtn').addEventListener('click', () => {
       const call = activeCall;
