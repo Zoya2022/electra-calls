@@ -81,6 +81,28 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   const hostIdFromLink = params.get('host');
   let peer = null, incomingCall = null, activeCall = null, waitingCall = null, localStream = null, callerSignal = null, pendingCallerId = null, pendingSignalConn = null, waitingCallerId = null, waitingSignalConn = null;
   let callerFinalStatus = null, waitingForSignalAck = false;
+  // Caller-only screen Wake Lock: prevents automatic screen timeout while connected.
+  // This does not guarantee audio when the browser is backgrounded or the phone is manually locked.
+  let callerWakeLock = null;
+  async function requestCallerWakeLock() {
+    if (!hostIdFromLink || !connected || document.visibilityState !== 'visible' || !('wakeLock' in navigator)) return;
+    try {
+      if (callerWakeLock && !callerWakeLock.released) return;
+      callerWakeLock = await navigator.wakeLock.request('screen');
+      callerWakeLock.addEventListener('release', () => { callerWakeLock = null; });
+    } catch (error) {
+      callerWakeLock = null;
+      console.info('Screen Wake Lock unavailable:', error && error.name);
+    }
+  }
+  async function releaseCallerWakeLock() {
+    const lock = callerWakeLock;
+    callerWakeLock = null;
+    if (lock) { try { await lock.release(); } catch {} }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && connected && hostIdFromLink) requestCallerWakeLock();
+  });
   const ignoredCallerIds = new Set();
   let timerStarted = 0, timerHandle = null, connected = false, muted = false, deafened = false;
   const show = id => $(id).classList.remove('hidden');
@@ -187,7 +209,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     if (call && activeCall !== call) return;
     if (!call || activeCall === call) activeCall = null;
     if (!call || incomingCall === call) incomingCall = null;
-    connected = false; stopTimer(); stopLocalStream(); resetLocalControls();
+    connected = false; if (hostIdFromLink) releaseCallerWakeLock(); stopTimer(); stopLocalStream(); resetLocalControls();
     $('remoteAudio').srcObject = null; $('callerRemoteAudio').srcObject = null;
     if (hostIdFromLink) {
       hide('callerInCall'); setCallerActions(false);
@@ -229,7 +251,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     call.on('stream', stream => {
       audio.srcObject = stream;
       audio.play().catch(() => {});
-      connected = true; startTimer();
+      connected = true; if (hostIdFromLink) requestCallerWakeLock(); startTimer();
       if (hostIdFromLink) {
         show('callerInCall'); setCallerActions(true);
         setText('callerBadge','CONNECTED');
