@@ -164,7 +164,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         show('incoming');
         $('acceptBtn').disabled = false;
         setText('hostStatus','Caller is ready — accept the waiting caller.');
-        setText('hostHint','A caller was waiting. You can now accept their call.');
+        setText('hostHint','');
       } else {
         setText('hostStatus','Ready — waiting for the next caller.');
       }
@@ -249,6 +249,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               const call = activeCall;
               if (call) { try { call.close(); } catch {} }
               callClosed(call || null);
+            } else if (message.type === 'WAITING') {
+              setText('callerBadge','YOU ARE IN THE QUEUE');
+              setText('callerStatus','You are waiting for the current conversation to finish. Please stay on this page.');
             } else if (message.type === 'BUSY') {
               callerFinalStatus = { badge: 'HOST BUSY', text: 'The host is already on another call. Please try again later.' };
               waitingForSignalAck = true;
@@ -347,6 +350,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               waitingCallerId = conn.peer;
               waitingSignalConn = conn;
               setText('hostHint','One caller is waiting. They will appear here when the current call ends.');
+              try { conn.send({ type: 'WAITING' }); } catch {}
               return;
             }
             if (pendingCallerId && pendingCallerId !== conn.peer) {
@@ -386,15 +390,14 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           }
         });
         conn.on('close', () => {
+          // A data-channel close alone does not prove that the waiting
+          // media call was cancelled. Keep the queued call until its own
+          // MediaConnection emits close, or the caller sends explicit CANCEL.
           if (waitingCallerId === conn.peer) {
-            waitingCallerId = null;
             waitingSignalConn = null;
-            if (waitingCall && waitingCall.peer === conn.peer) {
-              const cancelledWaiting = waitingCall;
-              waitingCall = null;
-              try { cancelledWaiting.close(); } catch {}
+            if (!waitingCall) {
+              setText('hostHint','Waiting for the caller connection…');
             }
-            setText('hostHint','The waiting caller disconnected.');
           }
           if (pendingCallerId === conn.peer && !activeCall) {
             pendingCallerId = null;
@@ -435,7 +438,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               waitingCallerId = null;
               if (waitingSignalConn) { try { waitingSignalConn.close(); } catch {} waitingSignalConn = null; }
             }
-            setText('hostHint','The waiting caller disconnected.');
+            setText('hostHint','');
           });
           call.on('error', () => {
             if (waitingCall === call) waitingCall = null;
