@@ -48,10 +48,12 @@ const caller1 = { id: 'caller-1-mic' };
 const caller2 = { id: 'caller-2-mic' };
 mixer.addParticipant('caller-1', caller1);
 mixer.addParticipant('caller-2', caller2);
+mixer.setPrivate('caller-1');
 const out1 = mixer.outputFor('caller-1');
 const out2 = mixer.outputFor('caller-2');
 
-mixer.setPrivate('caller-1');
+assert.equal(mixer.outputs.get('caller-1').hostGain.gain.value, 1, 'first caller should hear host immediately');
+assert.equal(mixer.outputs.get('caller-1').hold, null, 'first caller must not receive hold music on initial connection');
 const first = mixer.outputs.get('caller-1');
 const second = mixer.outputs.get('caller-2');
 assert.equal(first.hostGain.gain.value, 1, 'active caller 1 should hear host');
