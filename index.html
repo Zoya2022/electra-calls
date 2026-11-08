@@ -670,6 +670,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           $('hostDot').classList.add('live');
           return;
         }
+        // Caller 1 is the first live participant, not a held caller.
+        // Set this before creating its output so it never receives hold music.
+        conferenceMixer.setPrivate('caller-1');
         call.answer(conferenceMixer.outputFor('caller-1'));
         hide('incoming'); show('inCall'); attachCall(call);
       } catch (error) {
