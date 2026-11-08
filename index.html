@@ -154,19 +154,28 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       if (pendingSignalConn) { try { pendingSignalConn.close(); } catch {} pendingSignalConn = null; }
       pendingCallerId = null;
       hide('inCall'); hide('incoming');
-      if (waitingCall && waitingCallerId === waitingCall.peer) {
+      if (waitingCallerId && waitingCall && waitingCall.peer === waitingCallerId) {
         incomingCall = waitingCall;
         waitingCall = null;
         pendingCallerId = waitingCallerId;
         pendingSignalConn = waitingSignalConn;
         waitingCallerId = null;
         waitingSignalConn = null;
+        try { if (pendingSignalConn && pendingSignalConn.open) pendingSignalConn.send({ type: 'YOUR_TURN' }); } catch {}
         show('incoming');
         $('acceptBtn').disabled = false;
         setText('hostStatus','Caller is ready — accept the waiting caller.');
-        setText('hostHint','');
+        setText('hostHint','Your waiting caller is ready. Accept the call to bring them on air.');
+        const notice = 'Your waiting caller is ready. Accept the call to bring them on air.';
+        setTimeout(() => { if ($('hostHint').textContent === notice) setText('hostHint',''); }, 8000);
+      } else if (waitingCallerId) {
+        // The queue request can arrive before its media call. Keep the queue
+        // state so the media call can be promoted when it arrives.
+        setText('hostStatus','Waiting caller is connecting…');
+        setText('hostHint','One caller is waiting. Their call is being prepared.');
       } else {
         setText('hostStatus','Ready — waiting for the next caller.');
+        setText('hostHint','');
       }
       $('hostDot').classList.add('live');
     }
@@ -252,6 +261,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             } else if (message.type === 'WAITING') {
               setText('callerBadge','YOU ARE IN THE QUEUE');
               setText('callerStatus','You are waiting for the current conversation to finish. Please stay on this page.');
+            } else if (message.type === 'YOUR_TURN') {
+              setText('callerBadge','YOUR TURN');
+              setText('callerStatus','The current call has ended. Your call is now being shown to the host — please stay here.');
             } else if (message.type === 'BUSY') {
               callerFinalStatus = { badge: 'HOST BUSY', text: 'The host is already on another call. Please try again later.' };
               waitingForSignalAck = true;
@@ -446,6 +458,41 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           if (waitingCallerId === call.peer) {
             setText('hostHint','One caller is waiting. They will appear here when the current call ends.');
           }
+          return;
+        }
+        // If the host call ended before this queued media call arrived,
+        // promote it now instead of leaving the caller stuck in the queue.
+        if (waitingCallerId === call.peer) {
+          incomingCall = call;
+          pendingCallerId = call.peer;
+          pendingSignalConn = waitingSignalConn;
+          waitingCallerId = null;
+          waitingSignalConn = null;
+          try { if (pendingSignalConn && pendingSignalConn.open) pendingSignalConn.send({ type: 'YOUR_TURN' }); } catch {}
+          call.on('close', () => {
+            if (incomingCall !== call) return;
+            incomingCall = null;
+            pendingCallerId = null;
+            if (pendingSignalConn) { try { pendingSignalConn.close(); } catch {} pendingSignalConn = null; }
+            hide('incoming');
+            $('acceptBtn').disabled = false;
+            setText('hostStatus','Waiting caller disconnected before you answered.');
+            setText('hostHint','');
+          });
+          call.on('error', () => {
+            if (incomingCall !== call) return;
+            incomingCall = null;
+            pendingCallerId = null;
+            hide('incoming');
+            $('acceptBtn').disabled = false;
+            setText('hostStatus','Waiting caller connection failed.');
+          });
+          show('incoming');
+          $('acceptBtn').disabled = false;
+          setText('hostStatus','Your waiting caller is ready — accept the call.');
+          setText('hostHint','Your waiting caller is ready. Accept the call to bring them on air.');
+          const notice = 'Your waiting caller is ready. Accept the call to bring them on air.';
+          setTimeout(() => { if ($('hostHint').textContent === notice) setText('hostHint',''); }, 8000);
           return;
         }
         if (incomingCall) { call.close(); return; }
