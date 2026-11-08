@@ -47,7 +47,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
 <div class="actions"><button class="primary" id="acceptBtn">Accept call</button><button class="danger" id="rejectBtn">Reject</button></div>
 </div>
 <div id="inCall" class="panel hidden">
-<div class="statusline"><span class="dot live"></span><span>CALL CONNECTED</span></div><div class="timer" id="hostTimer">00:00</div><p class="small">You are live with a viewer.</p>
+<div class="statusline"><span class="dot live"></span><span>CALL CONNECTED</span></div><div class="timer" id="hostTimer">00:00</div><p class="small">You are live with a viewer.</p><div id="secondIncoming" class="panel hidden"><div class="badge">● SECOND CALLER WAITING</div><p class="small">Accept them without ending your current call.</p><button class="primary" id="acceptSecondBtn">Accept second caller</button></div><div id="conferenceControls" class="panel hidden"><div class="section-title">Conversation mode</div><p class="small">Choose who can hear each other.</p><div class="actions"><button class="secondary" id="talkCaller1Btn">Talk to Caller 1</button><button class="secondary" id="talkCaller2Btn">Talk to Caller 2</button><button class="primary" id="mergeCallersBtn">Merge both calls</button></div><p class="small" id="conferenceStatus">Caller 2 is on hold.</p></div>
 <div class="controls"><button class="control" id="hostMuteBtn">🎙 Mute mic</button><button class="control" id="hostDeafenBtn">🔊 Deafen</button></div>
 <div class="volume"><label for="hostVolume"><span>Speaker volume</span><span id="hostVolumeValue">100%</span></label><input id="hostVolume" type="range" min="0" max="100" value="100"></div>
 <div class="actions"><button class="danger" id="blockHostBtn">End &amp; block caller</button><button class="secondary" id="endHostBtn">End call</button></div>
@@ -69,7 +69,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
 <div class="actions" style="justify-content:center"><button class="primary" id="callBtn">Call now</button><button class="danger hidden caller-end" id="endCallerBtn">End call</button></div>
 <p class="small">Allow microphone access when your browser asks. No account or app needed.</p>
 </section>
-<audio id="remoteAudio" autoplay playsinline></audio><audio id="callerRemoteAudio" autoplay playsinline></audio>
+<audio id="remoteAudio" autoplay playsinline></audio><audio id="remoteAudio2" autoplay playsinline></audio><audio id="callerRemoteAudio" autoplay playsinline></audio>
 </div>
 <footer>Browser calling · No viewer account required</footer>
 </main>
