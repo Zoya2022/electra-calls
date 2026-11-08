@@ -107,31 +107,43 @@
       if (output.hold) return;
       const destination = this.context.createMediaStreamDestination();
       const master = this.context.createGain();
-      master.gain.value = 0.025;
+      master.gain.value = 0.045;
       master.connect(destination);
-      // Original gentle ambient waiting melody, synthesized locally.
-      const notes = [392, 493.88, 587.33, 493.88];
-      const oscillators = notes.map((frequency, index) => {
-        const oscillator = this.context.createOscillator();
-        const envelope = this.context.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.value = frequency;
-        envelope.gain.value = index % 2 ? 0.12 : 0.08;
-        oscillator.connect(envelope);
-        envelope.connect(master);
-        oscillator.start();
-        return oscillator;
-      });
+
+      // A soft, clearly melodic sequence (not a sustained chord/busy signal).
+      const oscillator = this.context.createOscillator();
+      const envelope = this.context.createGain();
+      const notes = [523.25, 659.25, 783.99, 659.25, 587.33, 698.46, 783.99, 659.25];
+      oscillator.type = 'sine';
+      envelope.gain.value = 0;
+      oscillator.connect(envelope);
+      envelope.connect(master);
+      const playPhrase = () => {
+        const now = this.context.currentTime + 0.04;
+        notes.forEach((frequency, index) => {
+          const at = now + index * 0.34;
+          oscillator.frequency.setValueAtTime(frequency, at);
+          envelope.gain.cancelScheduledValues(at);
+          envelope.gain.setValueAtTime(0, at);
+          envelope.gain.linearRampToValueAtTime(0.16, at + 0.045);
+          envelope.gain.linearRampToValueAtTime(0, at + 0.27);
+        });
+      };
+      oscillator.start();
+      playPhrase();
+      const phraseTimer = setInterval(playPhrase, 3000);
       const source = this.context.createMediaStreamSource(destination.stream);
       source.connect(output.destination);
-      output.hold = { oscillators, source, master };
+      output.hold = { oscillators: [oscillator], source, master, envelope, phraseTimer };
     }
 
     _stopHoldMusic(output) {
       if (!output.hold) return;
+      clearInterval(output.hold.phraseTimer);
       for (const oscillator of output.hold.oscillators) {
         try { oscillator.stop(); oscillator.disconnect(); } catch {}
       }
+      try { output.hold.envelope.disconnect(); } catch {}
       try { output.hold.source.disconnect(); } catch {}
       try { output.hold.master.disconnect(); } catch {}
       output.hold = null;
