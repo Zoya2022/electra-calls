@@ -36,6 +36,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
 </section>
 <section id="host" class="hidden">
 <div class="statusline"><span class="dot" id="hostDot"></span><span id="hostStatus">Starting host dashboard…</span></div>
+<div class="small" id="hostHint">Your caller link remains available while this dashboard stays open.</div>
 <div class="panel">
 <div class="small">YOUR LIVE CALLER LINK</div><div class="linkbox" id="shareLink">Creating your link…</div>
 <div class="actions"><button class="secondary" id="copyBtn">Copy caller link</button></div>
@@ -51,7 +52,6 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
 <div class="volume"><label for="hostVolume"><span>Speaker volume</span><span id="hostVolumeValue">100%</span></label><input id="hostVolume" type="range" min="0" max="100" value="100"></div>
 <div class="actions"><button class="danger" id="blockHostBtn">End &amp; block caller</button><button class="secondary" id="endHostBtn">End call</button></div>
 </div>
-<div class="small" id="hostHint">Your caller link remains available while this dashboard stays open.</div>
 </section>
 <section id="caller" class="hidden center">
 <div class="bigicon">☎</div><div class="badge" id="callerBadge">READY TO CALL</div><h2 class="section-title" style="margin-top:14px">Talk to Electra Explains</h2>
@@ -195,7 +195,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         // The queue request can arrive before its media call. Keep the queue
         // state so the media call can be promoted when it arrives.
         setText('hostStatus','Waiting caller is connecting…');
-        setText('hostHint','One caller is waiting. Their call is being prepared.');
+        showHostNotice('One caller is waiting. Their call is being prepared.');
       } else {
         setText('hostStatus','Ready — waiting for the next caller.');
         setText('hostHint','');
@@ -384,7 +384,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               }
               waitingCallerId = conn.peer;
               waitingSignalConn = conn;
-              setText('hostHint','One caller is waiting. They will appear here when the current call ends.');
+              showHostNotice('🔔 SECOND CALLER WAITING — They will appear here when the current call ends.');
               try { conn.send({ type: 'WAITING' }); } catch {}
               return;
             }
@@ -406,7 +406,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             waitingCallerId = null;
             waitingSignalConn = null;
             if (cancelledWaiting) { waitingCall = null; try { cancelledWaiting.close(); } catch {} }
-            setText('hostHint','The waiting caller cancelled.');
+            showHostNotice('The waiting caller cancelled.', 5000);
             try { conn.send({ type: 'CANCEL_ACK' }); } catch {}
           } else if (message.type === 'CANCEL' && pendingCallerId === conn.peer) {
             ignoredCallerIds.add(conn.peer);
