@@ -260,6 +260,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('callerDeafenBtn').addEventListener('click', () => setDeafened(!deafened));
     $('callBtn').addEventListener('click', async () => {
       $('callBtn').disabled = true;
+      hide('callBtn'); show('endCallerBtn');
       try {
         setText('callerStatus','Requesting microphone permission…');
         localStream = await microphone({caller:true});
@@ -313,6 +314,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             callerSignal = null;
             stopLocalStream();
             $('callBtn').disabled = false;
+            show('callBtn'); hide('endCallerBtn');
             if (callerFinalStatus) {
               setText('callerBadge',callerFinalStatus.badge);
               setText('callerStatus',callerFinalStatus.text);
@@ -324,18 +326,20 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           callerSignal.on('error', err => {
             setText('callerStatus','Could not contact host: ' + err.message);
             $('callBtn').disabled = false;
+            show('callBtn'); hide('endCallerBtn');
             stopLocalStream();
           });
         });
         peer.on('error', err => {
           setText('callerStatus','Could not connect: ' + err.message);
           $('callBtn').disabled = false;
+          show('callBtn'); hide('endCallerBtn');
           stopLocalStream();
           if (peer) { peer.destroy(); peer = null; }
         });
       } catch (error) {
         setText('callerStatus',error.message || 'Could not start microphone.');
-        $('callBtn').disabled = false; stopLocalStream();
+        $('callBtn').disabled = false; show('callBtn'); hide('endCallerBtn'); stopLocalStream();
       }
     });
     $('endCallerBtn').addEventListener('click', () => {
