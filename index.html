@@ -86,6 +86,20 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   const show = id => $(id).classList.remove('hidden');
   const hide = id => $(id).classList.add('hidden');
   const setText = (id, value) => { $(id).textContent = value; };
+  function setCallerActions(waiting) {
+    const callButton = $('callBtn');
+    const endButton = $('endCallerBtn');
+    if (waiting) {
+      callButton.style.setProperty('display','none','important');
+      endButton.classList.remove('hidden');
+      endButton.style.setProperty('display','inline-block','important');
+    } else {
+      callButton.style.removeProperty('display');
+      callButton.classList.remove('hidden');
+      endButton.style.removeProperty('display');
+      endButton.classList.add('hidden');
+    }
+  }
   let hostNoticeTimer = null;
   function showHostNotice(message, duration = 0) {
     if (hostNoticeTimer) clearTimeout(hostNoticeTimer);
@@ -176,7 +190,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     connected = false; stopTimer(); stopLocalStream(); resetLocalControls();
     $('remoteAudio').srcObject = null; $('callerRemoteAudio').srcObject = null;
     if (hostIdFromLink) {
-      hide('callerInCall'); hide('endCallerBtn'); show('callBtn');
+      hide('callerInCall'); setCallerActions(false);
       $('callBtn').disabled = false;
       setText('callerBadge','READY FOR NEXT CALLER');
       setText('callerStatus','Call ended. You can use this same link to call again.');
@@ -217,7 +231,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       audio.play().catch(() => {});
       connected = true; startTimer();
       if (hostIdFromLink) {
-        show('callerInCall'); hide('callBtn'); show('endCallerBtn');
+        show('callerInCall'); setCallerActions(true);
         setText('callerBadge','CONNECTED');
         setText('callerStatus','You are connected. Say hello!');
       } else {
@@ -260,7 +274,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('callerDeafenBtn').addEventListener('click', () => setDeafened(!deafened));
     $('callBtn').addEventListener('click', async () => {
       $('callBtn').disabled = true;
-      hide('callBtn'); show('endCallerBtn');
+      setCallerActions(true);
       try {
         setText('callerStatus','Requesting microphone permission…');
         localStream = await microphone({caller:true});
@@ -274,7 +288,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             if (!callerSignal || !callerSignal.open) return;
             callerSignal.send({ type: 'CALL_REQUEST' });
             setText('callerStatus','Calling host… please wait for them to accept.');
-            hide('callBtn'); show('endCallerBtn');
+            setCallerActions(true);
             const call = peer.call(hostIdFromLink, localStream);
             if (!call) throw new Error('Could not start the call. Please try again.');
             attachCall(call);
@@ -290,7 +304,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               if (call) { try { call.close(); } catch {} }
               callClosed(call || null);
             } else if (message.type === 'WAITING') {
-              hide('callBtn'); show('endCallerBtn');
+              setCallerActions(true);
               setText('callerBadge','YOU ARE IN THE QUEUE');
               setText('callerStatus','You are waiting for the current conversation to finish. Please stay on this page.');
             } else if (message.type === 'YOUR_TURN') {
@@ -314,7 +328,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             callerSignal = null;
             stopLocalStream();
             $('callBtn').disabled = false;
-            show('callBtn'); hide('endCallerBtn');
+            setCallerActions(false);
             if (callerFinalStatus) {
               setText('callerBadge',callerFinalStatus.badge);
               setText('callerStatus',callerFinalStatus.text);
@@ -326,20 +340,20 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           callerSignal.on('error', err => {
             setText('callerStatus','Could not contact host: ' + err.message);
             $('callBtn').disabled = false;
-            show('callBtn'); hide('endCallerBtn');
+            setCallerActions(false);
             stopLocalStream();
           });
         });
         peer.on('error', err => {
           setText('callerStatus','Could not connect: ' + err.message);
           $('callBtn').disabled = false;
-          show('callBtn'); hide('endCallerBtn');
+          setCallerActions(false);
           stopLocalStream();
           if (peer) { peer.destroy(); peer = null; }
         });
       } catch (error) {
         setText('callerStatus',error.message || 'Could not start microphone.');
-        $('callBtn').disabled = false; show('callBtn'); hide('endCallerBtn'); stopLocalStream();
+        $('callBtn').disabled = false; setCallerActions(false); stopLocalStream();
       }
     });
     $('endCallerBtn').addEventListener('click', () => {
