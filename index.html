@@ -18,6 +18,11 @@ button{border:0;border-radius:12px;padding:12px 17px;font:700 .94rem inherit;cur
 .primary{background:linear-gradient(135deg,#a99aff,#8069e8);color:#100d25}.secondary{background:#26334b;color:#f5f7ff;border:1px solid #3a4965}.danger{background:#542536;color:#ffdce3;border:1px solid #84364d}.success{background:#153e37;color:#b8ffe8;border:1px solid #286e5c}.actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:16px}
 .section-title{font-size:1.04rem;font-weight:750;margin:0 0 5px}.timer{font-variant-numeric:tabular-nums;font-size:2.35rem;font-weight:750;letter-spacing:.04em;margin:10px 0}
 .controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:16px}.control{background:#202c42;border:1px solid #34435d;color:#eef2ff;padding:14px 12px}.control.active{background:#573044;border-color:#a64a69;color:#ffe3ea}.volume{margin-top:17px}.volume label{display:flex;justify-content:space-between;color:var(--muted);font-size:.85rem;margin-bottom:9px}input[type=range]{width:100%;accent-color:#a99aff}
+.link-panel summary{cursor:pointer;list-style:none;color:#c8c0ff;font-size:.82rem;font-weight:800;letter-spacing:.04em;outline:none}
+.link-panel summary::-webkit-details-marker{display:none}
+.link-panel summary::after{content:"＋";float:right;color:#b7aaff;font-size:1rem}
+.link-panel[open] summary::after{content:"−"}
+.link-panel[open] summary{margin-bottom:14px}
 #hostHint.notice{margin-top:18px;padding:15px 17px;border:1px solid #b56bff;border-radius:14px;background:linear-gradient(110deg,#26134a,#171d3c);color:#f1ddff;font-size:1.02rem;font-weight:750;line-height:1.55;box-shadow:0 0 0 1px #a855f733,0 0 22px #a855f755;text-shadow:0 0 10px #c084fc55}
 .center{text-align:center}.bigicon{width:64px;height:64px;border-radius:20px;background:#2a2550;color:#c9bdff;display:grid;place-items:center;font-size:1.8rem;margin:0 auto 14px}
 .divider{height:1px;background:var(--line);margin:20px 0}.badge{display:inline-flex;align-items:center;gap:7px;border-radius:99px;background:#1c2e35;color:#8ef0c7;padding:7px 11px;font-size:.78rem;font-weight:750}
@@ -37,11 +42,6 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
 <section id="host" class="hidden">
 <div class="statusline"><span class="dot" id="hostDot"></span><span id="hostStatus">Starting host dashboard…</span></div>
 <div class="small" id="hostHint">Your caller link remains available while this dashboard stays open.</div>
-<div class="panel">
-<div class="small">YOUR LIVE CALLER LINK</div><div class="linkbox" id="shareLink">Creating your link…</div>
-<div class="actions"><button class="secondary" id="copyBtn">Copy caller link</button></div>
-<p class="small">Keep this host page open during your live. Share this same link with every viewer; it stays the same between calls.</p>
-</div>
 <div id="incoming" class="panel hidden">
 <div class="badge">● INCOMING CALL</div><h2 class="section-title" style="margin-top:14px">Someone wants to join</h2><p class="muted">Accept to bring the viewer on air.</p>
 <div class="actions"><button class="primary" id="acceptBtn">Accept call</button><button class="danger" id="rejectBtn">Reject</button></div>
@@ -52,6 +52,12 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
 <div class="volume"><label for="hostVolume"><span>Speaker volume</span><span id="hostVolumeValue">100%</span></label><input id="hostVolume" type="range" min="0" max="100" value="100"></div>
 <div class="actions"><button class="danger" id="blockHostBtn">End &amp; block caller</button><button class="secondary" id="endHostBtn">End call</button></div>
 </div>
+<details class="panel link-panel" id="hostLinkDetails">
+<summary>YOUR LIVE CALLER LINK <span class="small">— tap to show / copy</span></summary>
+<div class="linkbox" id="shareLink">Creating your link…</div>
+<div class="actions"><button class="secondary" id="copyBtn">Copy caller link</button></div>
+<p class="small">Keep this host page open during your live. Share this same link with every viewer; it stays the same between calls.</p>
+</details>
 </section>
 <section id="caller" class="hidden center">
 <div class="bigicon">☎</div><div class="badge" id="callerBadge">READY TO CALL</div><h2 class="section-title" style="margin-top:14px">Talk to Electra Explains</h2>
