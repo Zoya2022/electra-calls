@@ -72,7 +72,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   const $ = id => document.getElementById(id);
   const params = new URLSearchParams(location.search);
   const hostIdFromLink = params.get('host');
-  let peer = null, incomingCall = null, activeCall = null, localStream = null, callerSignal = null, pendingCallerId = null, pendingSignalConn = null;
+  let peer = null, incomingCall = null, activeCall = null, waitingCall = null, localStream = null, callerSignal = null, pendingCallerId = null, pendingSignalConn = null, waitingCallerId = null, waitingSignalConn = null;
   let callerFinalStatus = null, waitingForSignalAck = false;
   const ignoredCallerIds = new Set();
   let timerStarted = 0, timerHandle = null, connected = false, muted = false, deafened = false;
@@ -154,7 +154,20 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       if (pendingSignalConn) { try { pendingSignalConn.close(); } catch {} pendingSignalConn = null; }
       pendingCallerId = null;
       hide('inCall'); hide('incoming');
-      setText('hostStatus','Ready — waiting for the next caller.');
+      if (waitingCall && waitingCallerId === waitingCall.peer) {
+        incomingCall = waitingCall;
+        waitingCall = null;
+        pendingCallerId = waitingCallerId;
+        pendingSignalConn = waitingSignalConn;
+        waitingCallerId = null;
+        waitingSignalConn = null;
+        show('incoming');
+        $('acceptBtn').disabled = false;
+        setText('hostStatus','Caller is ready — accept the waiting caller.');
+        setText('hostHint','A caller was waiting. You can now accept their call.');
+      } else {
+        setText('hostStatus','Ready — waiting for the next caller.');
+      }
       $('hostDot').classList.add('live');
     }
   }
@@ -325,12 +338,17 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         conn.on('data', message => {
           if (!message || typeof message !== 'object') return;
           if (message.type === 'CALL_REQUEST') {
-            if (activeCall || (pendingCallerId && pendingCallerId !== conn.peer)) {
-              ignoredCallerIds.add(conn.peer);
+            if (activeCall || pendingCallerId) {
+              if (waitingCallerId && waitingCallerId !== conn.peer) {
+                ignoredCallerIds.add(conn.peer);
+                try { conn.send({ type: 'BUSY' }); } catch {}
+                return;
+              }
+              waitingCallerId = conn.peer;
+              waitingSignalConn = conn;
               setText('hostHint', activeCall
-                ? 'Another viewer tried to join while you were on a call.'
-                : 'Another viewer tried to join while another caller was waiting.');
-              try { conn.send({ type: 'BUSY' }); } catch {}
+                ? 'One caller is waiting. They will appear here when the current call ends.'
+                : 'One caller is waiting behind the incoming call.');
               return;
             }
             pendingCallerId = conn.peer;
@@ -340,6 +358,14 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               $('acceptBtn').disabled = false;
               setText('hostStatus','Incoming call — accept or reject.');
             }
+          } else if (message.type === 'CANCEL' && waitingCallerId === conn.peer) {
+            ignoredCallerIds.add(conn.peer);
+            const cancelledWaiting = waitingCall && waitingCall.peer === conn.peer ? waitingCall : null;
+            waitingCallerId = null;
+            waitingSignalConn = null;
+            if (cancelledWaiting) { waitingCall = null; try { cancelledWaiting.close(); } catch {} }
+            setText('hostHint','The waiting caller cancelled.');
+            try { conn.send({ type: 'CANCEL_ACK' }); } catch {}
           } else if (message.type === 'CANCEL' && pendingCallerId === conn.peer) {
             ignoredCallerIds.add(conn.peer);
             const cancelled = incomingCall && incomingCall.peer === conn.peer ? incomingCall : null;
@@ -357,6 +383,16 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           }
         });
         conn.on('close', () => {
+          if (waitingCallerId === conn.peer) {
+            waitingCallerId = null;
+            waitingSignalConn = null;
+            if (waitingCall && waitingCall.peer === conn.peer) {
+              const cancelledWaiting = waitingCall;
+              waitingCall = null;
+              try { cancelledWaiting.close(); } catch {}
+            }
+            setText('hostHint','The waiting caller disconnected.');
+          }
           if (pendingCallerId === conn.peer && !activeCall) {
             pendingCallerId = null;
             pendingSignalConn = null;
@@ -386,7 +422,27 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         // Clear references left behind by a caller who disconnected abruptly.
         if (activeCall && activeCall.open === false) callClosed(activeCall);
         if (incomingCall && incomingCall.open === false) incomingCall = null;
-        if (activeCall || incomingCall) { call.close(); return; }
+        if (activeCall) {
+          if (waitingCall) { call.close(); return; }
+          waitingCall = call;
+          call.on('close', () => {
+            if (waitingCall !== call) return;
+            waitingCall = null;
+            if (waitingCallerId === call.peer) {
+              waitingCallerId = null;
+              if (waitingSignalConn) { try { waitingSignalConn.close(); } catch {} waitingSignalConn = null; }
+            }
+            setText('hostHint','The waiting caller disconnected.');
+          });
+          call.on('error', () => {
+            if (waitingCall === call) waitingCall = null;
+          });
+          if (waitingCallerId === call.peer) {
+            setText('hostHint','One caller is waiting. They will appear here when the current call ends.');
+          }
+          return;
+        }
+        if (incomingCall) { call.close(); return; }
         incomingCall = call;
         // Listen for cancellation immediately, even before the host accepts.
         // PeerJS otherwise leaves a stale incoming-call panel on screen.
@@ -464,6 +520,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       // is not blocked by a stale incomingCall reference.
       incomingCall = null;
       pendingCallerId = null;
+      if (pendingSignalConn) { try { pendingSignalConn.close(); } catch {} pendingSignalConn = null; }
       activeCall = call;
       $('acceptBtn').disabled = true;
       try {
