@@ -173,6 +173,65 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     ringtoneTimer = setInterval(ringOnce, kind === 'waiting' ? 2400 : 1900);
   }
 
+
+  // Caller-side ringback and busy tones use a separate Web Audio context.
+  // They never connect to, mute, or alter the PeerJS voice stream.
+  let callerToneContext = null, callerToneTimer = null, callerToneGeneration = 0;
+  function stopCallerTone() {
+    callerToneGeneration++;
+    if (callerToneTimer) clearInterval(callerToneTimer);
+    callerToneTimer = null;
+  }
+  function callerTonePulse(frequencies, duration) {
+    if (!callerToneContext || callerToneContext.state !== 'running') return;
+    const startAt = callerToneContext.currentTime;
+    frequencies.forEach(frequency => {
+      const oscillator = callerToneContext.createOscillator();
+      const gain = callerToneContext.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(frequency, startAt);
+      gain.gain.setValueAtTime(0.0001, startAt);
+      gain.gain.exponentialRampToValueAtTime(0.075, startAt + 0.025);
+      gain.gain.setValueAtTime(0.075, startAt + duration - 0.035);
+      gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+      oscillator.connect(gain);
+      gain.connect(callerToneContext.destination);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + duration + 0.01);
+      oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+    });
+  }
+  async function startCallerTone(kind) {
+    stopCallerTone();
+    if (!callerToneContext) return;
+    const generation = callerToneGeneration;
+    try {
+      if (callerToneContext.state !== 'running') await callerToneContext.resume();
+    } catch (error) {
+      console.warn('Caller tone could not resume audio:', error);
+      return;
+    }
+    if (generation !== callerToneGeneration || !callerToneContext || callerToneContext.state !== 'running') return;
+    if (kind === 'busy') {
+      let pulses = 0;
+      const pulse = () => {
+        if (generation !== callerToneGeneration) return;
+        if (pulses >= 5) { stopCallerTone(); return; }
+        callerTonePulse([480, 620], 0.38);
+        pulses++;
+      };
+      pulse();
+      callerToneTimer = setInterval(pulse, 850);
+    } else {
+      const pulse = () => {
+        if (generation !== callerToneGeneration) return;
+        callerTonePulse([440, 480], 1.8);
+      };
+      pulse();
+      callerToneTimer = setInterval(pulse, 6000);
+    }
+  }
+
   const formatTime = ms => {
     const total = Math.floor(ms / 1000), minutes = Math.floor(total / 60), seconds = total % 60;
     return String(minutes).padStart(2,'0') + ':' + String(seconds).padStart(2,'0');
@@ -241,6 +300,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     connected = false; stopTimer(); stopLocalStream(); resetLocalControls();
     $('remoteAudio').srcObject = null; $('callerRemoteAudio').srcObject = null;
     if (hostIdFromLink) {
+      stopCallerTone();
       hide('callerInCall'); setCallerActions(false);
       $('callBtn').disabled = false;
       setText('callerBadge','READY FOR NEXT CALLER');
@@ -281,6 +341,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     call.on('stream', stream => {
       audio.srcObject = stream;
       audio.play().catch(() => {});
+      if (hostIdFromLink) stopCallerTone();
       connected = true; startTimer();
       if (hostIdFromLink) {
         show('callerInCall'); setCallerActions(true);
@@ -325,6 +386,10 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('callerMuteBtn').addEventListener('click', () => setMicMuted(!muted));
     $('callerDeafenBtn').addEventListener('click', () => setDeafened(!deafened));
     $('callBtn').addEventListener('click', async () => {
+      const CallerAudioContext = window.AudioContext || window.webkitAudioContext;
+      if (CallerAudioContext && !callerToneContext) callerToneContext = new CallerAudioContext();
+      if (callerToneContext && callerToneContext.state === 'suspended') callerToneContext.resume().catch(() => {});
+      stopCallerTone();
       $('callBtn').disabled = true;
       setCallerActions(true);
       try {
@@ -339,6 +404,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           callerSignal.on('open', () => {
             if (!callerSignal || !callerSignal.open) return;
             callerSignal.send({ type: 'CALL_REQUEST' });
+            startCallerTone('ringback');
             setText('callerStatus','Calling host… please wait for them to accept.');
             setCallerActions(true);
             const call = peer.call(hostIdFromLink, localStream);
@@ -349,6 +415,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           callerSignal.on('data', message => {
             if (!message || typeof message !== 'object') return;
             if (message.type === 'REJECT') {
+              stopCallerTone();
               callerFinalStatus = { badge: 'CALL DECLINED', text: 'The host declined your call. You can try again.' };
               waitingForSignalAck = true;
               try { callerSignal.send({ type: 'REJECT_ACK' }); } catch {}
@@ -356,13 +423,17 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               if (call) { try { call.close(); } catch {} }
               callClosed(call || null);
             } else if (message.type === 'WAITING') {
+              stopCallerTone();
               setCallerActions(true);
               setText('callerBadge','YOU ARE IN THE QUEUE');
               setText('callerStatus','You are waiting for the current conversation to finish. Please stay on this page.');
             } else if (message.type === 'YOUR_TURN') {
+              startCallerTone('ringback');
               setText('callerBadge','YOUR TURN');
               setText('callerStatus','The current call has ended. Your call is now being shown to the host — please stay here.');
             } else if (message.type === 'BUSY') {
+              stopCallerTone();
+              startCallerTone('busy');
               callerFinalStatus = { badge: 'HOST BUSY', text: 'The host is already on another call. Please try again later.' };
               waitingForSignalAck = true;
               try { callerSignal.send({ type: 'BUSY_ACK' }); } catch {}
@@ -409,6 +480,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       }
     });
     $('endCallerBtn').addEventListener('click', () => {
+      stopCallerTone();
       // Three-step cancellation: CANCEL -> CANCEL_ACK -> CANCEL_DONE.
       callerFinalStatus = { badge: 'CALL ENDED', text: 'You ended the call. You can call again using this link.' };
       waitingForSignalAck = true;
