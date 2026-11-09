@@ -388,8 +388,13 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('callBtn').addEventListener('click', async () => {
       const CallerAudioContext = window.AudioContext || window.webkitAudioContext;
       if (CallerAudioContext && !callerToneContext) callerToneContext = new CallerAudioContext();
-      if (callerToneContext && callerToneContext.state === 'suspended') callerToneContext.resume().catch(() => {});
       stopCallerTone();
+      // Start the ringback directly from the user's tap, before any async
+      // microphone/network work. This is the most reliable autoplay unlock.
+      if (callerToneContext && callerToneContext.state === 'suspended') {
+        callerToneContext.resume().catch(error => console.warn('Caller audio unlock failed:', error));
+      }
+      startCallerTone('ringback');
       $('callBtn').disabled = true;
       setCallerActions(true);
       try {
@@ -475,6 +480,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           if (peer) { peer.destroy(); peer = null; }
         });
       } catch (error) {
+        stopCallerTone();
         setText('callerStatus',error.message || 'Could not start microphone.');
         $('callBtn').disabled = false; setCallerActions(false); stopLocalStream();
       }
