@@ -125,8 +125,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
 
   // Host-only incoming-call sounds. The dashboard click unlocks Web Audio;
   // this code does not touch the PeerJS media streams or call state.
-  let ringtoneContext = null, ringtoneTimer = null;
+  let ringtoneContext = null, ringtoneTimer = null, ringtoneGeneration = 0;
   function stopRingtone() {
+    ringtoneGeneration++;
     if (ringtoneTimer) clearInterval(ringtoneTimer);
     ringtoneTimer = null;
   }
@@ -138,8 +139,8 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     oscillator.type = 'sine';
     oscillator.frequency.setValueAtTime(frequency, startAt);
     gain.gain.setValueAtTime(0.0001, startAt);
-    gain.gain.exponentialRampToValueAtTime(0.12, startAt + 0.025);
-    gain.gain.setValueAtTime(0.12, startAt + duration - 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.16, startAt + 0.025);
+    gain.gain.setValueAtTime(0.16, startAt + duration - 0.04);
     gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
     oscillator.connect(gain);
     gain.connect(ringtoneContext.destination);
@@ -147,17 +148,25 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     oscillator.stop(startAt + duration + 0.01);
     oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
   }
-  function startRingtone(kind = 'incoming') {
+  async function startRingtone(kind = 'incoming') {
     stopRingtone();
     if (!ringtoneContext) return;
+    const generation = ringtoneGeneration;
+    try {
+      if (ringtoneContext.state !== 'running') await ringtoneContext.resume();
+    } catch (error) {
+      console.warn('Electra ringtone could not resume audio:', error);
+      return;
+    }
+    if (generation !== ringtoneGeneration || !ringtoneContext || ringtoneContext.state !== 'running') return;
     const ringOnce = () => {
-      if (ringtoneContext.state !== 'running') return;
+      if (generation !== ringtoneGeneration || !ringtoneContext || ringtoneContext.state !== 'running') return;
       if (kind === 'waiting') {
-        playRingTone(660, 0.13);
-        playRingTone(880, 0.13, 0.2);
+        playRingTone(660, 0.16);
+        playRingTone(880, 0.16, 0.23);
       } else {
-        playRingTone(440, 0.32);
-        playRingTone(554, 0.32, 0.43);
+        playRingTone(440, 0.34);
+        playRingTone(554, 0.34, 0.46);
       }
     };
     ringOnce();
