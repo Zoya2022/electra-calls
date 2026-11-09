@@ -433,13 +433,13 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               setText('callerStatus','The current call has ended. Your call is now being shown to the host — please stay here.');
             } else if (message.type === 'BUSY') {
               stopCallerTone();
-              startCallerTone('busy');
               callerFinalStatus = { badge: 'HOST BUSY', text: 'The host is already on another call. Please try again later.' };
               waitingForSignalAck = true;
               try { callerSignal.send({ type: 'BUSY_ACK' }); } catch {}
               const call = activeCall;
               if (call) { try { call.close(); } catch {} }
               callClosed(call || null);
+              startCallerTone('busy');
             } else if (message.type === 'CANCEL_ACK') {
               try { callerSignal.send({ type: 'CANCEL_DONE' }); } catch {}
             }
