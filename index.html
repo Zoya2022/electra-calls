@@ -122,6 +122,57 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     setText('hostHint', '');
     $('hostHint').classList.remove('notice');
   }
+
+  // Host-only incoming-call sounds. The dashboard click unlocks Web Audio;
+  // this code does not touch the PeerJS media streams or call state.
+  let ringtoneContext = null, ringtoneTimer = null, ringtoneGeneration = 0;
+  function stopRingtone() {
+    ringtoneGeneration++;
+    if (ringtoneTimer) clearInterval(ringtoneTimer);
+    ringtoneTimer = null;
+  }
+  function playRingTone(frequency, duration, delay = 0) {
+    if (!ringtoneContext || ringtoneContext.state !== 'running') return;
+    const startAt = ringtoneContext.currentTime + delay;
+    const oscillator = ringtoneContext.createOscillator();
+    const gain = ringtoneContext.createGain();
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(frequency, startAt);
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(0.16, startAt + 0.025);
+    gain.gain.setValueAtTime(0.16, startAt + duration - 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+    oscillator.connect(gain);
+    gain.connect(ringtoneContext.destination);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + duration + 0.01);
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+  }
+  async function startRingtone(kind = 'incoming') {
+    stopRingtone();
+    if (!ringtoneContext) return;
+    const generation = ringtoneGeneration;
+    try {
+      if (ringtoneContext.state !== 'running') await ringtoneContext.resume();
+    } catch (error) {
+      console.warn('Electra ringtone could not resume audio:', error);
+      return;
+    }
+    if (generation !== ringtoneGeneration || !ringtoneContext || ringtoneContext.state !== 'running') return;
+    const ringOnce = () => {
+      if (generation !== ringtoneGeneration || !ringtoneContext || ringtoneContext.state !== 'running') return;
+      if (kind === 'waiting') {
+        playRingTone(660, 0.16);
+        playRingTone(880, 0.16, 0.23);
+      } else {
+        playRingTone(440, 0.34);
+        playRingTone(554, 0.34, 0.46);
+      }
+    };
+    ringOnce();
+    ringtoneTimer = setInterval(ringOnce, kind === 'waiting' ? 2400 : 1900);
+  }
+
   const formatTime = ms => {
     const total = Math.floor(ms / 1000), minutes = Math.floor(total / 60), seconds = total % 60;
     return String(minutes).padStart(2,'0') + ':' + String(seconds).padStart(2,'0');
@@ -208,6 +259,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         waitingSignalConn = null;
         try { if (pendingSignalConn && pendingSignalConn.open) pendingSignalConn.send({ type: 'YOUR_TURN' }); } catch {}
         show('incoming');
+        startRingtone('incoming');
         $('acceptBtn').disabled = false;
         setText('hostStatus','Caller is ready — accept the waiting caller.');
         showHostNotice('Your waiting caller is ready. Accept the call to bring them on air.', 8000);
@@ -410,6 +462,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               }
               waitingCallerId = conn.peer;
               waitingSignalConn = conn;
+              startRingtone('waiting');
               showHostNotice('🔔 SECOND CALLER WAITING — They will appear here when the current call ends.');
               try { conn.send({ type: 'WAITING' }); } catch {}
               return;
@@ -421,6 +474,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             }
             pendingCallerId = conn.peer;
             pendingSignalConn = conn;
+            startRingtone('incoming');
             if (incomingCall && incomingCall.peer === conn.peer) {
               show('incoming');
               $('acceptBtn').disabled = false;
@@ -431,6 +485,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             const cancelledWaiting = waitingCall && waitingCall.peer === conn.peer ? waitingCall : null;
             waitingCallerId = null;
             waitingSignalConn = null;
+            stopRingtone();
             if (cancelledWaiting) { waitingCall = null; try { cancelledWaiting.close(); } catch {} }
             showHostNotice('The waiting caller cancelled.', 5000);
             try { conn.send({ type: 'CANCEL_ACK' }); } catch {}
@@ -439,6 +494,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             const cancelled = incomingCall && incomingCall.peer === conn.peer ? incomingCall : null;
             pendingCallerId = null;
             incomingCall = null;
+            stopRingtone();
             hide('incoming');
             $('acceptBtn').disabled = false;
             if (cancelled) { try { cancelled.close(); } catch {} }
@@ -461,6 +517,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             }
           }
           if (pendingCallerId === conn.peer && !activeCall) {
+            stopRingtone();
             pendingCallerId = null;
             pendingSignalConn = null;
             if (incomingCall && incomingCall.peer === conn.peer) {
@@ -496,6 +553,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             if (waitingCall !== call) return;
             waitingCall = null;
             if (waitingCallerId === call.peer) {
+              stopRingtone();
               waitingCallerId = null;
               if (waitingSignalConn) { try { waitingSignalConn.close(); } catch {} waitingSignalConn = null; }
             }
@@ -517,9 +575,11 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           pendingSignalConn = waitingSignalConn;
           waitingCallerId = null;
           waitingSignalConn = null;
+          startRingtone('incoming');
           try { if (pendingSignalConn && pendingSignalConn.open) pendingSignalConn.send({ type: 'YOUR_TURN' }); } catch {}
           call.on('close', () => {
             if (incomingCall !== call) return;
+            stopRingtone();
             incomingCall = null;
             pendingCallerId = null;
             if (pendingSignalConn) { try { pendingSignalConn.close(); } catch {} pendingSignalConn = null; }
@@ -530,6 +590,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           });
           call.on('error', () => {
             if (incomingCall !== call) return;
+            stopRingtone();
             incomingCall = null;
             pendingCallerId = null;
             hide('incoming');
@@ -537,6 +598,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             setText('hostStatus','Waiting caller connection failed.');
           });
           show('incoming');
+          startRingtone('incoming');
           $('acceptBtn').disabled = false;
           setText('hostStatus','Your waiting caller is ready — accept the call.');
           showHostNotice('Your waiting caller is ready. Accept the call to bring them on air.', 8000);
@@ -552,6 +614,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             return;
           }
           if (incomingCall !== call) return;
+          stopRingtone();
           incomingCall = null;
           hide('incoming');
           $('acceptBtn').disabled = false;
@@ -560,6 +623,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         });
         call.on('error', err => {
           if (incomingCall !== call) return;
+          stopRingtone();
           incomingCall = null;
           hide('incoming');
           $('acceptBtn').disabled = false;
@@ -572,6 +636,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             if (incomingCall !== call) return;
             if (pendingPc.connectionState === 'closed' || pendingPc.connectionState === 'failed' ||
                 pendingPc.iceConnectionState === 'closed' || pendingPc.iceConnectionState === 'failed') {
+              stopRingtone();
               incomingCall = null;
               hide('incoming');
               $('acceptBtn').disabled = false;
@@ -601,6 +666,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       });
     }
     $('hostBtn').addEventListener('click', () => {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass && !ringtoneContext) ringtoneContext = new AudioContextClass();
+      if (ringtoneContext && ringtoneContext.state === 'suspended') ringtoneContext.resume().catch(() => {});
       hide('home'); show('host');
       // Persist one private, random host ID on this browser so refreshing the
       // host dashboard does not invalidate the caller link.
@@ -615,6 +683,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     $('hostDeafenBtn').addEventListener('click', () => setDeafened(!deafened));
     $('acceptBtn').addEventListener('click', async () => {
       if (!incomingCall || incomingCall.peer !== pendingCallerId) return;
+      stopRingtone();
       clearHostNotice();
       const call = incomingCall;
       // Move the pending call into activeCall immediately so a later caller
@@ -644,6 +713,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       } finally { $('acceptBtn').disabled = false; }
     });
     $('rejectBtn').addEventListener('click', () => {
+      stopRingtone();
       const call = incomingCall;
       if (pendingCallerId) ignoredCallerIds.add(pendingCallerId);
       // Keep the signaling channel open until the caller confirms receipt.
