@@ -222,7 +222,17 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       };
       pulse();
       callerToneTimer = setInterval(pulse, 850);
+    } else if (kind === 'engage') {
+      // A queued caller hears the engaged-line cadence continuously until
+      // promoted to YOUR_TURN, connected, cancelled, or disconnected.
+      const pulse = () => {
+        if (generation !== callerToneGeneration) return;
+        callerTonePulse([480, 620], 0.38);
+      };
+      pulse();
+      callerToneTimer = setInterval(pulse, 850);
     } else {
+      // Standard ringback cadence: tone followed by a quiet interval.
       const pulse = () => {
         if (generation !== callerToneGeneration) return;
         callerTonePulse([440, 480], 1.8);
@@ -389,10 +399,12 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
       const CallerAudioContext = window.AudioContext || window.webkitAudioContext;
       if (CallerAudioContext && !callerToneContext) callerToneContext = new CallerAudioContext();
       stopCallerTone();
-      // Start the ringback directly from the user's tap, before any async
-      // microphone/network work. This is the most reliable autoplay unlock.
-      if (callerToneContext && callerToneContext.state === 'suspended') {
-        callerToneContext.resume().catch(error => console.warn('Caller audio unlock failed:', error));
+      // Fully unlock Web Audio inside the Call Now gesture before starting
+      // microphone/network work. This avoids the tone-start race on browsers
+      // that suspend audio when an async permission prompt appears.
+      if (callerToneContext && callerToneContext.state !== 'running') {
+        try { await callerToneContext.resume(); }
+        catch (error) { console.warn('Caller audio unlock failed:', error); }
       }
       startCallerTone('ringback');
       $('callBtn').disabled = true;
@@ -428,7 +440,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
               if (call) { try { call.close(); } catch {} }
               callClosed(call || null);
             } else if (message.type === 'WAITING') {
-              stopCallerTone();
+              startCallerTone('engage');
               setCallerActions(true);
               setText('callerBadge','YOU ARE IN THE QUEUE');
               setText('callerStatus','You are waiting for the current conversation to finish. Please stay on this page.');
