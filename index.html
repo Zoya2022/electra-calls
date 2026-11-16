@@ -335,6 +335,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     if (!hostIdFromLink && conferenceMixer) { conferenceMixer.dispose(); conferenceMixer = null; }
     $('remoteAudio').srcObject = null; $('remoteAudio2').srcObject = null; $('callerRemoteAudio').srcObject = null;
     if (hostIdFromLink) {
+      if (callerFallbackTimer) { clearTimeout(callerFallbackTimer); callerFallbackTimer = null; }
+      callerMediaCall = null;
+      callerFallbackStarted = false;
       stopCallerTone();
       hide('callerInCall'); setCallerActions(false);
       $('callBtn').disabled = false;
@@ -466,7 +469,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           }, 8000);
           callerSignal.on('open', () => {
             if (callerFallbackTimer) { clearTimeout(callerFallbackTimer); callerFallbackTimer = null; }
-            if (!callerSignal || !callerSignal.open) return;
+            if (!callerSignal || !callerSignal.open || callerFallbackStarted) return;
             callerSignal.send({ type: 'CALL_REQUEST' });
             startCallerTone('ringback');
             setText('callerStatus','Calling host… please wait for them to accept.');
@@ -535,10 +538,6 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           });
         });
         peer.on('error', err => {
-          if (!callerFallbackStarted && localStream) {
-            startCallerMediaFallback();
-            return;
-          }
           setText('callerStatus','Could not connect: ' + err.message);
           $('callBtn').disabled = false;
           setCallerActions(false);
