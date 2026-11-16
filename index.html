@@ -83,6 +83,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   let peer = null, incomingCall = null, activeCall = null, waitingCall = null, localStream = null, callerSignal = null, pendingCallerId = null, pendingSignalConn = null, waitingCallerId = null, waitingSignalConn = null;
   let conferenceMixer = null;
   let callerFinalStatus = null, waitingForSignalAck = false;
+   let callerFallbackTimer = null, callerMediaCall = null, callerFallbackStarted = false;
   const ignoredCallerIds = new Set();
   let timerStarted = 0, timerHandle = null, connected = false, muted = false, deafened = false;
   const show = id => $(id).classList.remove('hidden');
@@ -334,6 +335,9 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
     if (!hostIdFromLink && conferenceMixer) { conferenceMixer.dispose(); conferenceMixer = null; }
     $('remoteAudio').srcObject = null; $('remoteAudio2').srcObject = null; $('callerRemoteAudio').srcObject = null;
     if (hostIdFromLink) {
+      if (callerFallbackTimer) { clearTimeout(callerFallbackTimer); callerFallbackTimer = null; }
+      callerMediaCall = null;
+      callerFallbackStarted = false;
       stopCallerTone();
       hide('callerInCall'); setCallerActions(false);
       $('callBtn').disabled = false;
@@ -418,6 +422,23 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
   if (hostIdFromLink) {
     hide('home'); show('caller');
     bindVolume('callerVolume','callerRemoteAudio','callerVolumeValue');
+    function startCallerMediaFallback() {
+      if (callerFallbackStarted || !peer || peer.destroyed || !localStream) return;
+      callerFallbackStarted = true;
+      if (callerFallbackTimer) { clearTimeout(callerFallbackTimer); callerFallbackTimer = null; }
+      setText('callerStatus','Trying an alternate connection… please wait.');
+      try {
+        callerMediaCall = peer.call(hostIdFromLink, localStream, { metadata: { electraFallback: true } });
+        if (!callerMediaCall) throw new Error('Could not start the alternate call.');
+        attachCall(callerMediaCall);
+        show('endCallerBtn');
+      } catch (error) {
+        setText('callerStatus','Could not reach the host: ' + (error.message || 'connection failed'));
+        $('callBtn').disabled = false;
+        setCallerActions(false);
+        stopLocalStream();
+      }
+    }
     $('callerMuteBtn').addEventListener('click', () => setMicMuted(!muted));
     $('callerDeafenBtn').addEventListener('click', () => setDeafened(!deafened));
     $('callBtn').addEventListener('click', async () => {
@@ -443,16 +464,22 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           // Establish a reliable data channel first. The host only displays
           // an incoming notification after receiving this explicit request.
           callerSignal = peer.connect(hostIdFromLink, { reliable: true });
+          callerFallbackTimer = setTimeout(() => {
+            if (!callerSignal || !callerSignal.open) startCallerMediaFallback();
+          }, 8000);
           callerSignal.on('open', () => {
-            if (!callerSignal || !callerSignal.open) return;
+            if (callerFallbackTimer) { clearTimeout(callerFallbackTimer); callerFallbackTimer = null; }
+            if (!callerSignal || !callerSignal.open || callerFallbackStarted) return;
             callerSignal.send({ type: 'CALL_REQUEST' });
             startCallerTone('ringback');
             setText('callerStatus','Calling host… please wait for them to accept.');
             setCallerActions(true);
-            const call = peer.call(hostIdFromLink, localStream);
-            if (!call) throw new Error('Could not start the call. Please try again.');
-            attachCall(call);
-            show('endCallerBtn');
+            if (!callerMediaCall) {
+              callerMediaCall = peer.call(hostIdFromLink, localStream);
+              if (!callerMediaCall) throw new Error('Could not start the call. Please try again.');
+              attachCall(callerMediaCall);
+              show('endCallerBtn');
+            }
           });
           callerSignal.on('data', message => {
             if (!message || typeof message !== 'object') return;
@@ -503,10 +530,11 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
             }
           });
           callerSignal.on('error', err => {
-            setText('callerStatus','Could not contact host: ' + err.message);
-            $('callBtn').disabled = false;
-            setCallerActions(false);
-            stopLocalStream();
+            if (!callerFallbackStarted) {
+              startCallerMediaFallback();
+            } else {
+              setText('callerStatus','Could not contact host: ' + err.message);
+            }
           });
         });
         peer.on('error', err => {
@@ -666,6 +694,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
         if (incomingCall && incomingCall.open === false) incomingCall = null;
         if (activeCall) {
           if (waitingCall) { call.close(); return; }
+          if (call.metadata && call.metadata.electraFallback === true && !waitingCallerId) waitingCallerId = call.peer;
           waitingCall = call;
           call.on('close', () => {
             if (waitingCall !== call) return;
@@ -726,6 +755,7 @@ footer{text-align:center;color:#75839d;font-size:.76rem;margin-top:17px}
           return;
         }
         if (incomingCall) { call.close(); return; }
+        if (call.metadata && call.metadata.electraFallback === true) pendingCallerId = call.peer;
         incomingCall = call;
         // Listen for cancellation immediately, even before the host accepts.
         // PeerJS otherwise leaves a stale incoming-call panel on screen.
